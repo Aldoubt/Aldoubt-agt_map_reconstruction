@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agt-map-reconstruction"
+version = "0.1.0"
+description = "Agricultural LiDAR map reconstruction benchmark"
+dependencies = [
+    "numpy",
+    "open3d",
+    "matplotlib",
+    "opencv-python",
+    "scipy",
+    "pyyaml"
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
