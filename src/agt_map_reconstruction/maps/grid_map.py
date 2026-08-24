@@ -1,5 +1,8 @@
 import numpy as np
 
+from .elevation_normalization import normalize_height
+from .traversability import compute_traversability
+
 
 def points_to_height_grid(points, resolution=0.05):
     points = np.asarray(points)
@@ -16,8 +19,12 @@ def points_to_height_grid(points, resolution=0.05):
     return grid
 
 
-def traversability_from_height(height_grid, max_height_difference=0.15):
-    valid = ~np.isnan(height_grid)
-    result = np.zeros_like(height_grid, dtype=np.uint8)
-    result[valid] = 1
-    return result
+def build_traversability_map(points, resolution=0.05, kernel_size=5):
+    height_grid = points_to_height_grid(points, resolution)
+    relative_height = normalize_height(height_grid, kernel_size)
+    traversability = compute_traversability(relative_height)
+    return {
+        "height": height_grid,
+        "relative_height": relative_height,
+        "traversability": traversability,
+    }
