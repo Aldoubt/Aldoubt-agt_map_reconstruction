@@ -8,77 +8,81 @@ A standalone agricultural LiDAR map reconstruction benchmark. The project evalua
 
 ---
 
-## Phase 0 - Benchmark Foundation (Completed)
+# Phase 0 - Benchmark Foundation (Completed)
 
-### Goal
+Completed:
 
-Create a unified benchmark pipeline from PCD input to algorithm comparison output.
-
-### Completed
-
-- PCD loading from FAST-LIVO2/LIO-SLAM generated maps
+- PCD loading from FAST-LIVO2/LIO-SLAM maps
 - Unified segmentation interface
-- Baseline algorithm execution framework
+- Algorithm comparison framework
 - Visualization pipeline
 
-### Current algorithms
+Algorithms:
 
 | Algorithm | Status | Notes |
 |---|---|---|
-| Height threshold | completed | Simple global height baseline |
-| Morphological PMF baseline | completed | Local morphology inspired baseline |
+| Height threshold | completed | Global height baseline |
+| Morphological PMF baseline | completed | Local morphology baseline |
 
 ---
 
-## Phase 1 - First Real Dataset Validation (Completed)
+# Phase 1 - Real FAST-LIVO2 Dataset Validation (Completed)
 
-### Dataset
-
-Input:
+Dataset:
 
 ```
 FAST-LIVO2 processed.pcd
 size: ~2.6GB
 ```
 
-### Observation
+Results:
 
-The first visualization showed that simple point projection was insufficient because all point classes were rendered with the same color.
+## Height threshold
 
-Changes:
+```
+ground:      9838256
+non-ground: 76074357
+```
 
-- Added colored segmentation visualization
-- Added height grid visualization
-- Started evaluating agricultural structure recovery
+Observation:
+
+- Excessive non-ground classification.
+- Useful only as a simple baseline.
+
+## Morphological PMF baseline
+
+```
+ground:      38445361
+non-ground: 47467252
+```
+
+Observation:
+
+- Better recovery of continuous terrain.
+- Agricultural row structures become visible.
 
 ---
 
-## Phase 2 - Agricultural Structure Recovery (Current)
+# Phase 2 - Agricultural Structure Recovery (Current)
 
-### Problem discovered
+## Motivation
 
-Traditional ground segmentation alone is insufficient for agricultural scenes.
+Traditional ground segmentation does not directly solve agricultural navigation.
 
-Agricultural environments contain:
-
-- crop rows
-- ridges
-- corridors
-- vegetation above ground
-- stable walls
-
-The navigation requirement is not simply:
+The target changes from:
 
 ```
 ground / non-ground
 ```
 
-but:
+into:
 
 ```
 PCD
  |
 terrain understanding
+ |
+relative elevation
  |
 traversability reasoning
  |
@@ -89,64 +93,82 @@ centerline generation
 
 ---
 
-## Next implementation targets
+# Phase 2.1 - Relative Elevation and Traversability (Implemented)
 
-### 1. Elevation normalization
+Added:
 
-Convert absolute height into relative height:
+- Local elevation normalization
+- Relative height calculation
+- Initial geometry based traversability map
+
+Pipeline:
 
 ```
-point_z - local_ground_height
+Ground cloud
+    |
+height grid
+    |
+local ground estimation
+    |
+relative height
+    |
+traversability classification
 ```
 
-Purpose:
+Outputs:
 
-Separate crop ridges from actual obstacles.
+```
+height_map.png
+relative_height.png
+traversability.png
+```
+
+Current classification:
+
+```
+0 unknown
+1 traversable
+2 obstacle
+```
+
+Note:
+
+The current traversability model is a baseline and will be improved with:
+
+- slope
+- roughness
+- corridor continuity
+- row structure constraints
 
 ---
 
-### 2. Traversability grid
+# Next targets
 
-Generate:
+## Phase 2.2 Corridor Extraction
 
-- free space probability
-- obstacle probability
-- unknown region
+Implement:
 
-Output:
+- row direction estimation
+- parallel structure detection
+- corridor mask generation
+- centerline extraction
 
-```
-traversability_map.png
-traversability.yaml
-```
-
----
-
-### 3. Agricultural corridor extraction
-
-Recover:
-
-- row direction
-- aisle regions
-- centerline
-
-Output:
+Outputs:
 
 ```
+corridor_mask.png
 centerline.csv
-corridor.geojson
 ```
 
 ---
 
-## Experiment record rule
+# Experiment Record Rule
 
-Every algorithm update should record:
+Every algorithm update records:
 
 1. Algorithm name
-2. Input dataset
+2. Dataset
 3. Parameters
-4. Output visualization
+4. Visualization output
 5. Failure cases
 6. Decision for next iteration
-
