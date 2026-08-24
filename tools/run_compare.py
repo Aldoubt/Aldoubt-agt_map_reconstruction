@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run first-stage agricultural LiDAR segmentation comparison."""
+"""Run agricultural LiDAR segmentation and traversability comparison."""
 
 import argparse
 from pathlib import Path
@@ -8,6 +8,8 @@ from agt_map_reconstruction.io.pcd_loader import load_pcd
 from agt_map_reconstruction.visualization.compare import save_segmentation
 from agt_map_reconstruction.algorithms.height_threshold import segment as height_segment
 from agt_map_reconstruction.algorithms.morphological_pmf import segment as pmf_segment
+from agt_map_reconstruction.maps.grid_map import build_traversability_map
+from agt_map_reconstruction.visualization.grid import save_grid_maps
 
 
 ALGORITHMS = {
@@ -27,7 +29,12 @@ def main():
 
     for name, algo in ALGORITHMS.items():
         result = algo(points)
-        save_segmentation(result, root / name)
+        out = root / name
+        save_segmentation(result, out)
+
+        maps = build_traversability_map(result["ground"])
+        save_grid_maps(maps, out)
+
         print(name, len(result["ground"]), len(result["non_ground"]))
 
 
