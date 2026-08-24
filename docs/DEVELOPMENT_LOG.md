@@ -142,23 +142,12 @@ The current traversability model is a baseline and will be improved with:
 
 ---
 
-# Next targets
+# Phase 2.2 Corridor Extraction
 
-## Phase 2.2 Corridor Extraction
-
-Implement:
-
-- row direction estimation
-- parallel structure detection
-- corridor mask generation
-- centerline extraction
-
-Outputs:
-
-```
-corridor_mask.png
-centerline.csv
-```
+EXP002 A/B/C corridor recovery is implemented and synthetic-tested. The
+authoritative FAST-LIVO2 PCD run remains pending. Implementation details,
+commands, output paths, metrics, and conclusions are maintained only in
+`docs/EXPERIMENTS.md`.
 
 ---
 

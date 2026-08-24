@@ -44,6 +44,28 @@ Each algorithm generates:
 - occupancy/traversability grid
 - comparison image
 
+## EXP002 corridor recovery
+
+EXP002 compares three geometry-only stages on the same grid input:
+
+- A: connected traversable free space
+- B: component-wise PCA filtering aligned with the recovered crop-row axis
+- C: row-frame valley extraction with width, length, and continuity constraints
+
+Run all three stages:
+
+```bash
+python tools/run_corridor_test.py \
+  --pcd /data/FAST-LIVO2/processed.pcd \
+  --mode all \
+  --hash-pcd
+```
+
+Every invocation creates an immutable directory under
+`results/EXP002/<UTC timestamp>_<git commit>/`. See
+`docs/EXPERIMENTS.md` for the canonical experiment record and artifact
+layout.
+
 ## Design principle
 
 This repository is independent from navigation runtime. It focuses on evaluating map reconstruction quality before integration into planners.

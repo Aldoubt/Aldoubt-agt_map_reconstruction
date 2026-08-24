@@ -12,6 +12,7 @@ dependencies = [
     "matplotlib",
     "opencv-python",
     "scipy",
+    "scikit-image",
     "pyyaml"
 ]
 
