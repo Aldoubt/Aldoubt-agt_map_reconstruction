@@ -63,7 +63,7 @@ Observation:
 
 ---
 
-# Phase 2 - Agricultural Structure Recovery (Current)
+# Phase 2 - Agricultural Structure Recovery (Completed)
 
 ## Motivation
 
@@ -142,23 +142,34 @@ The current traversability model is a baseline and will be improved with:
 
 ---
 
-# Next targets
+# Phase 2.2 Corridor Extraction
 
-## Phase 2.2 Corridor Extraction
+EXP002 A/B/C corridor recovery is implemented, synthetic-tested, and run on
+the authoritative FAST-LIVO2 PCD. A oversegments, B collapses, and C recovers
+four plausible local corridors with insufficient global recall. Exact run
+identity, input hash, metrics, commands, and conclusions are maintained only
+in `docs/EXPERIMENTS.md`.
 
-Implement:
+---
 
-- row direction estimation
-- parallel structure detection
-- corridor mask generation
-- centerline extraction
+# Phase 3 - Conservative Ground Evidence (Current)
 
-Outputs:
+EXP003 implements chunked robust elevation statistics, bounded local ground
+interpolation, independently supported ground classification, four-state
+evidence, and an inflated navigation costmap. Open, edge-touching, oversized,
+or sparsely supported gaps remain unknown. Code, synthetic tests, artifact
+checks, and the synthetic CLI smoke are complete.
 
-```
-corridor_mask.png
-centerline.csv
-```
+Pending:
+
+- run the authoritative 85M-point PCD
+- inspect real-map evidence and costmap quality
+- profile runtime, throughput, and peak memory at acceptance scale
+
+EXP004 rosbag raycasting is deferred as a feasibility probe only. It is not an
+implemented capability or current baseline. The canonical command, output
+tree, configuration, acceptance boundary, and future decision are maintained
+only in `docs/EXPERIMENTS.md`.
 
 ---
 
