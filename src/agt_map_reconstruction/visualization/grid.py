@@ -14,6 +14,11 @@ def _save_array(array, path, title):
     plt.close()
 
 
+def save_grid(array, path, title="grid"):
+    """Compatibility wrapper for saving a single grid image."""
+    _save_array(np.asarray(array), Path(path), title)
+
+
 def save_grid_maps(maps, output):
     output = Path(output)
     _save_array(maps["height"], output / "height_map.png", "height")
