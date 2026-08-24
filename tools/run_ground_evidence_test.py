@@ -107,6 +107,11 @@ def _parse_args(argv=None):
     parser.add_argument("--obstacle-height-m", type=float, default=0.15)
     parser.add_argument("--obstacle-inflation-radius-m", type=float, default=0.25)
     parser.add_argument("--interpolated-ground-cost", type=int, default=64)
+    parser.add_argument(
+        "--use-q90-for-obstacles",
+        action="store_true",
+        help="Use per-cell Q90 for obstacle evidence; off by default for greenhouse baseline",
+    )
     return parser.parse_args(argv)
 
 
@@ -135,6 +140,7 @@ def main(argv=None):
         obstacle_height_m=args.obstacle_height_m,
         obstacle_inflation_radius_m=args.obstacle_inflation_radius_m,
         interpolated_ground_cost=args.interpolated_ground_cost,
+        use_q90_for_obstacles=args.use_q90_for_obstacles,
     )
     pcd_snapshot = _snapshot_pcd(pcd_path, args.hash_pcd)
 

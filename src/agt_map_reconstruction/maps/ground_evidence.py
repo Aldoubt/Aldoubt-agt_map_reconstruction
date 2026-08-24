@@ -256,7 +256,7 @@ def _interpolate_bounded_components(ground_surface, source, unsupported, config)
     return interpolated_surface, filled
 
 
-def build_ground_evidence_details(low_height, point_count, config):
+def build_ground_evidence_details(low_height, point_count, config, q90_height=None):
     """Build one consistent bounded ground surface and evidence classification.
 
     The ground model uses only cells meeting the measurement-density threshold.
@@ -265,6 +265,10 @@ def build_ground_evidence_details(low_height, point_count, config):
     """
     _validate_config(config)
     low_height, point_count = _validate_measurements(low_height, point_count)
+    if q90_height is not None:
+        q90_height = np.asarray(q90_height, dtype=np.float64)
+        if q90_height.shape != low_height.shape:
+            raise ValueError("q90_height must have the same shape as low_height")
 
     measured = (point_count >= config.min_points_per_cell) & np.isfinite(low_height)
     measured_height = np.where(measured, low_height, np.nan)
@@ -290,10 +294,12 @@ def build_ground_evidence_details(low_height, point_count, config):
         & np.isfinite(ground_surface)
         & (low_height - ground_surface <= config.obstacle_height_m)
     )
+    obstacle_height = low_height if q90_height is None else q90_height
     confirmed_occupied = (
         ground_model_support
         & np.isfinite(ground_surface)
-        & ~confirmed_free
+        & np.isfinite(obstacle_height)
+        & (obstacle_height - ground_surface > config.obstacle_height_m)
     )
 
     evidence = np.full(low_height.shape, EvidenceClass.UNKNOWN, dtype=np.uint8)
@@ -318,9 +324,11 @@ def build_ground_evidence_details(low_height, point_count, config):
     )
 
 
-def build_ground_evidence(low_height, point_count, config):
+def build_ground_evidence(low_height, point_count, config, q90_height=None):
     """Return the stable evidence grid from the detailed Task 2 result."""
-    return build_ground_evidence_details(low_height, point_count, config).evidence
+    return build_ground_evidence_details(
+        low_height, point_count, config, q90_height=q90_height
+    ).evidence
 
 
 def build_navigation_costmap(evidence, config):

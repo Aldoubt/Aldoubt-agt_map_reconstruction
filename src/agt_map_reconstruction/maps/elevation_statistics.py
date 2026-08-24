@@ -19,6 +19,9 @@ class ElevationStatistics:
     point_count: np.ndarray
     minimum_height: np.ndarray
     maximum_height: np.ndarray
+    q10_height: np.ndarray
+    q50_height: np.ndarray
+    q90_height: np.ndarray
     origin_xy: np.ndarray
     resolution: float
 
@@ -124,7 +127,19 @@ def points_to_elevation_statistics(
         np.add.at(histogram, (flat_indices, bins), 1)
 
     target_count = np.maximum(1, np.ceil(point_count * low_quantile).astype(np.int64))
-    selected_bin = (np.cumsum(histogram, axis=1) >= target_count[:, None]).argmax(axis=1)
+    cumulative = np.cumsum(histogram, axis=1)
+    def quantile_height(quantile):
+        targets = np.maximum(1, np.ceil(point_count * quantile).astype(np.int64))
+        selected = (cumulative >= targets[:, None]).argmax(axis=1)
+        values = np.full(cell_count, np.nan, dtype=np.float64)
+        values[observed] = minimum_height[observed] + (
+            selected[observed]
+            * (maximum_height[observed] - minimum_height[observed])
+            / histogram_bins
+        )
+        return values
+
+    selected_bin = (cumulative >= target_count[:, None]).argmax(axis=1)
     empty = point_count == 0
     low_height = np.full(cell_count, np.nan, dtype=np.float64)
     observed = ~empty
@@ -133,6 +148,9 @@ def points_to_elevation_statistics(
         * (maximum_height[observed] - minimum_height[observed])
         / histogram_bins
     )
+    q10_height = quantile_height(0.10)
+    q50_height = quantile_height(0.50)
+    q90_height = quantile_height(0.90)
     minimum_height[empty] = np.nan
     maximum_height[empty] = np.nan
     grid_shape = (height, width)
@@ -141,6 +159,9 @@ def points_to_elevation_statistics(
         point_count=point_count.reshape(grid_shape),
         minimum_height=minimum_height.reshape(grid_shape),
         maximum_height=maximum_height.reshape(grid_shape),
+        q10_height=q10_height.reshape(grid_shape),
+        q50_height=q50_height.reshape(grid_shape),
+        q90_height=q90_height.reshape(grid_shape),
         origin_xy=origin_xy,
         resolution=float(resolution),
     )

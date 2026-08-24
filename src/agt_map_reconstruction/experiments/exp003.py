@@ -44,6 +44,7 @@ class Exp003Config:
     obstacle_height_m: float = 0.15
     obstacle_inflation_radius_m: float = 0.25
     interpolated_ground_cost: int = 64
+    use_q90_for_obstacles: bool = False
 
     def __post_init__(self):
         integer_parameters = (
@@ -67,6 +68,8 @@ class Exp003Config:
         for name in integer_parameters + real_parameters:
             if isinstance(getattr(self, name), bool):
                 raise ValueError(f"{name} must not be boolean")
+        if not isinstance(self.use_q90_for_obstacles, bool):
+            raise ValueError("use_q90_for_obstacles must be boolean")
         if (
             not isinstance(self.resolution, Real)
             or not np.isfinite(self.resolution)
@@ -141,6 +144,9 @@ class Exp003Result:
     """Authoritative numeric products and traceability for one EXP003 run."""
 
     low_height: np.ndarray
+    q10_height: np.ndarray
+    q50_height: np.ndarray
+    q90_height: np.ndarray
     ground_surface: np.ndarray
     clearance: np.ndarray
     point_count: np.ndarray
@@ -171,11 +177,15 @@ def run_exp003(points, config):
         statistics.low_height,
         statistics.point_count,
         evidence_config,
+        q90_height=statistics.q90_height if config.use_q90_for_obstacles else None,
     )
     costmap = build_navigation_costmap(evidence_result.evidence, evidence_config)
     finite_input_points = int(np.isfinite(points[:, :3]).all(axis=1).sum())
     return Exp003Result(
         low_height=statistics.low_height,
+        q10_height=statistics.q10_height,
+        q50_height=statistics.q50_height,
+        q90_height=statistics.q90_height,
         ground_surface=evidence_result.ground_surface,
         clearance=evidence_result.clearance,
         point_count=statistics.point_count,

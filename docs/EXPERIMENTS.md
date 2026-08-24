@@ -314,6 +314,46 @@ the complete immutable run directory, profile runtime and peak memory, inspect
 the evidence and costmap in the same local regions recovered by EXP002-C, and
 record the real-data decision here.
 
+### EXP003 real-data diagnostic iterations
+
+The diagnostic record is archived at
+`docs/experiments/EXP003_real_data_diagnostic_2026-08-24.md`. The first two
+implementation iterations are deliberately PCD-output-only:
+
+1. `python tools/diagnose_exp003.py results/EXP003/<run_id>` writes robust
+   percentiles, negative-clearance counts, evidence counts, an inflation-radius
+   scan, and categorical PNG previews without rereading the PCD.
+2. Elevation rasterization now retains Q10/Q50/Q90 arrays in memory and EXP003
+   uses Q90 as the obstacle statistic, making isolated low-quantile outliers
+   less likely to become occupied evidence. The original low-height and
+   artifact schemas remain unchanged.
+
+These iterations are implementation baselines, not real-map acceptance claims;
+ROI labels and row-direction metrics remain follow-up work.
+
+The executed PMF, EXP003, and MK-mini envelope comparison is recorded in
+[`docs/experiments/EXP003_pmf_envelope_comparison_2026-08-24.md`](experiments/EXP003_pmf_envelope_comparison_2026-08-24.md).
+
+### MK-mini offline envelope v0
+
+The fixed PCD preview may use the bare MK-mini body envelope without waiting for
+the mounted `base_footprint` transform:
+
+```text
+length = 0.840 m
+width = 0.600 m
+reference = geometric center
+payload = excluded
+```
+
+`VehicleEnvelopeConfig` and `build_vehicle_navigation_layers` apply this
+rectangle to a row-aligned evidence map. Unknown cells remain non-traversable;
+the result is an offline navigation candidate, not a vehicle-ready route asset.
+The 1.5 m turning-radius constraint remains a separate connector-planning gate.
+
+The first PCD-only row/channel extraction is recorded in
+[`docs/experiments/EXP003_row_structure_channel_analysis_2026-08-24.md`](experiments/EXP003_row_structure_channel_analysis_2026-08-24.md).
+
 ---
 
 ## EXP004 Rosbag Raycasting Feasibility Probe

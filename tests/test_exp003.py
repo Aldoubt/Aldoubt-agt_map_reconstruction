@@ -73,6 +73,19 @@ def test_elevation_statistics_counts_only_finite_xyz_samples():
     np.testing.assert_allclose(statistics.minimum_height, [[0.10, 0.25]])
     np.testing.assert_allclose(statistics.maximum_height, [[0.30, 0.25]])
     assert np.isfinite(statistics.low_height).all()
+    assert np.isfinite(statistics.q10_height).all()
+    assert np.isfinite(statistics.q50_height).all()
+    assert np.isfinite(statistics.q90_height).all()
+
+
+def test_elevation_statistics_exposes_distribution_quantiles_for_noise_diagnostics():
+    points = np.asarray([[0.01, 0.01, value] for value in (0.0, 0.0, 0.0, 0.0, 0.0, 1.0)])
+    statistics = points_to_elevation_statistics(
+        points, resolution=0.1, chunk_size=2, low_quantile=0.1, histogram_bins=100
+    )
+    assert statistics.q10_height[0, 0] == pytest.approx(0.0)
+    assert statistics.q50_height[0, 0] == pytest.approx(0.0)
+    assert statistics.q90_height[0, 0] == pytest.approx(0.99, abs=0.02)
 
 
 def test_elevation_statistics_rejects_a_single_low_outlier_from_low_height():
@@ -228,6 +241,25 @@ def test_ground_evidence_distinguishes_measured_ground_and_elevated_obstacles():
     assert evidence.dtype == np.uint8
     assert evidence[1, 1] == EvidenceClass.OCCUPIED_CONFIRMED
     assert evidence[0, 0] == EvidenceClass.FREE_CONFIRMED
+
+
+def test_ground_evidence_can_use_q90_as_the_obstacle_height_statistic():
+    low_height = np.zeros((3, 3), dtype=np.float64)
+    q90_height = np.zeros((3, 3), dtype=np.float64)
+    low_height[1, 1] = 0.0
+    q90_height[1, 1] = 0.0
+    point_count = np.full((3, 3), 3, dtype=np.int64)
+    config = GroundEvidenceConfig(
+        resolution=1.0, min_points_per_cell=3, ground_window_m=3.0,
+        ground_percentile=20.0, obstacle_height_m=0.3,
+        max_interpolation_gap_m=0.0,
+    )
+    with_outlier = q90_height.copy()
+    with_outlier[1, 1] = 1.0
+    evidence = build_ground_evidence_details(
+        low_height, point_count, config, q90_height=with_outlier
+    ).evidence
+    assert evidence[1, 1] == EvidenceClass.OCCUPIED_CONFIRMED
 
 
 def test_ground_evidence_preserves_low_density_cells_as_unknown_without_gap_support():
