@@ -59,19 +59,27 @@ relative elevation
 row direction estimation
         |
         v
-corridor extraction
+row-aware corridor extraction
         |
         v
 centerline generation
 ```
 
-Algorithm:
+Algorithm stages:
 
-- PCA based dominant direction estimation
-- geometric corridor baseline
+### EXP002-A Baseline
+
+- PCA dominant direction estimation
+- connected free-space extraction
 - centerline export
 
-Current output:
+### EXP002-B Row-aware constraint
+
+- dominant row direction consistency
+- geometric filtering of inconsistent regions
+- no learned semantic model
+
+Output:
 
 ```
 results/EXP002/
@@ -85,8 +93,14 @@ results/EXP002/
 └── centerline.csv
 ```
 
-Future improvements:
+Current limitations:
 
-- direction consistency
+- corridor width is not constrained
+- parallel row detection is not implemented
+- quantitative centerline evaluation is pending
+
+Next stage:
+
 - corridor width constraint
 - row parallel structure detection
+- map-to-navigation interface validation
