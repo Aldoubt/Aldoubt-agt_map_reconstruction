@@ -69,11 +69,20 @@ Algorithm:
 
 - PCA based dominant direction estimation
 - geometric corridor baseline
+- centerline export
 
-Output:
+Current output:
 
 ```
 results/EXP002/
+
+├── metadata.yaml
+├── height.png
+├── relative_height.png
+├── traversability.png
+├── corridor.png
+├── centerline.png
+└── centerline.csv
 ```
 
 Future improvements:
