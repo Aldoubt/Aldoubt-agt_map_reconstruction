@@ -451,7 +451,7 @@ Recovered by constant lateral offset:
 | A16 | +0.20 m | avoids centreline structural collision |
 | A19 | -0.10 m | removes sparse collision |
 
-`A14` remains the only centreline route and is also accepted by EXP004-B.
+`A14` remains the only centreline route and is also accepted by EXP004-B1.
 
 Strictly failing after constant-offset search:
 
@@ -463,18 +463,161 @@ Useful failure diagnostics:
 
 - `A07`: best attempt `-0.05 m`, only 1 remaining blocking/collision pose.
 - `A20`: best attempt `-0.20 m`, only 1 remaining blocking/collision pose.
-- `A03`: no hard collision on centreline; strict failure is caused by unknown overlap. Diagnostic `--allow-unknown` increases the total EXP004-B pass count from 8 / 20 to 9 / 20, but unknown remains blocking for acceptance.
-- `A05`: centreline fails, but a full constant route passes at `-0.30 m`; this validates the purpose of EXP004-B and provides the first detailed in-aisle route case.
+- `A03`: no hard collision on centreline; strict failure is caused by unknown overlap. Diagnostic `--allow-unknown` increases the total EXP004-B1 pass count from 8 / 20 to 9 / 20, but unknown remains blocking for acceptance.
+- `A05`: centreline fails, but a full constant route passes at `-0.30 m`; this validates the purpose of EXP004-B1 and provides the first detailed in-aisle route case.
 
 Conclusion:
 
 Constant lateral search recovers 7 additional measured-footprint routes without modifying the static map. This demonstrates that a substantial portion of the EXP004-A failures were centreline-placement failures rather than aisle-unreachable failures. The remaining 12 aisles should not be forced into PASS by changing the PGM; they require either a spatially varying lateral route or source-geometry review.
 
-Next stage: EXP004-B2 Smooth Lateral Route
+---
 
-1. allow the lateral offset to vary gradually along the aisle instead of remaining constant;
-2. preserve the same polygon collision and unknown-blocking policy;
-3. penalize offset change / curvature and reward clearance;
-4. start with `A07` and `A20`, where only one blocking pose remains after B1;
-5. retain `A05` as the reference success case;
-6. only after in-aisle route geometry is stable, add headland exit and `A05 -> A06` Ackermann transition constraints.
+### EXP004-B2 Smooth Lateral Route
+
+Status: implemented, tested, and replay-validated on 2026-08-25
+
+Goal:
+
+Allow lateral offset to vary gradually along the aisle and determine whether failures that cannot be solved by one constant offset are true in-aisle blockers or are primarily row-entry / row-exit handoff effects.
+
+Search model:
+
+```text
+longitudinal control stations (0.50 m default)
+                  |
+                  v
+lateral offset lattice (0.05 m default)
+                  |
+                  v
+bounded offset change between stations
+                  |
+                  v
+continuous swept polygon transition check
+                  |
+                  v
+dynamic-programming route selection
+                  |
+                  v
+0.10 m sampled final route validation
+```
+
+Default strict parameters:
+
+```text
+sample_spacing_m    = 0.10
+control_spacing_m   = 0.50
+offset_step_m       = 0.05
+max_offset_change_m = 0.10
+endpoint_trim_m     = 0.00
+allow_unknown       = false
+```
+
+The dynamic-programming score rewards blocked-space clearance and penalizes absolute lateral displacement, offset change, a second-difference curvature proxy, and advisory candidate overlap. The transition checker uses the continuously swept convex polygon footprint so an obstacle cannot be skipped between 0.10 m samples.
+
+No Ackermann steering-angle or minimum-turning-radius constraint is applied in B2. `max_offset_change_m` limits geometric smoothness only; vehicle kinematics remain a later stage.
+
+Implementation:
+
+```text
+src/agt_map_reconstruction/maps/smooth_lateral_route.py
+tools/search_smooth_lateral_routes.py
+tests/test_smooth_lateral_route.py
+```
+
+Output:
+
+```text
+results/EXP004/smooth-lateral-route-v1/
+├── smooth_route_search.json
+├── smooth_route_search.csv
+├── smooth_route_overlay.png
+└── <focus>_smooth_route_overlay.png
+```
+
+Overlay legend:
+
+```text
+orange -> recovered centreline
+green  -> B2 smooth route PASS
+red    -> B1 best failed constant route retained for comparison
+```
+
+Test status:
+
+```text
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -q tests/test_smooth_lateral_route.py
+7 passed
+```
+
+The plugin-autoload guard is intentional for ROS 2 sourced shells because `launch_testing` can otherwise mix ROS/system Python packages into this pure offline pytest suite.
+
+#### Strict full-length replay
+
+Measured `mk_mini` footprint, `endpoint_trim_m=0.00`, unknown blocking:
+
+```text
+B1 baseline pass:      8 / 20
+B2 strict pass:        9 / 20
+new B2 recoveries:     1
+newly recovered aisle: A06
+strict failures:      11
+```
+
+Strict failure-region classification:
+
+```text
+entry:    A09 A10 A18
+interior: A03
+exit:     A01 A02 A07 A13 A15 A17 A20
+```
+
+The main result is therefore **not** that a more complex smooth route solves most remaining aisles. Under strict full-length validation, B2 only adds `A06` beyond B1.
+
+`A07` and `A20`, despite having only one blocking pose in B1, remain B2 failures. Their B1 collision occurs at route distance `29.98 m` in a `30.40 m` aisle, leaving `0.42 m` to the recovered aisle end. This equals the `mk_mini` forward footprint extent (`+0.42 m`), showing that these two failures occur at the terminal footprint pose rather than in the aisle interior.
+
+#### Handoff-boundary sensitivity diagnostic
+
+`endpoint_trim_m` shortens the evaluated in-aisle segment at both ends. It is a diagnostic parameter and must not be reported as strict full-length acceptance.
+
+With `endpoint_trim_m=0.05 m`:
+
+- `A07` still fails at exit;
+- `A20` still fails at exit.
+
+With `endpoint_trim_m=0.10 m`, unknown still blocking:
+
+```text
+B1 baseline pass:  8 / 20
+B2 diagnostic:    17 / 20
+recovered:         9
+remaining:         A01 A03 A10
+```
+
+Recovered relative to B1 under the 0.10 m handoff trim:
+
+```text
+A02 A06 A07 A09 A13 A15 A17 A18 A20
+```
+
+If `endpoint_trim_m=0.10 m` and `--allow-unknown` are both enabled, the diagnostic result becomes 18 / 20 and additionally recovers `A03`; only `A01` and `A10` remain blocked. This is not an acceptance configuration because unknown is intentionally blocking in the strict policy.
+
+Interpretation:
+
+1. B2 proves that `A06` is a genuine variable-lateral-route recovery under the unchanged strict map policy.
+2. Many other B1 failures are dominated by row entry/exit geometry rather than by in-aisle obstacle avoidance.
+3. `A07` and `A20` were initially expected to be ideal B2 cases, but the replay disproved that hypothesis: their single blocker is at the exit handoff boundary.
+4. `A03` remains the clearest unknown-space policy case.
+5. The correct next step is therefore to stop increasing in-aisle planner complexity and explicitly validate the row/headland handoff and vehicle kinematics.
+
+Conclusion:
+
+EXP004-B2 improves the strict measured-footprint result only from 8 / 20 to 9 / 20. The 0.10 m endpoint-trim sensitivity jump to 17 / 20 is stronger evidence that the next bottleneck is the recovered aisle endpoint / headland interface, not the static PGM interior. No map cells were edited to obtain either result.
+
+Next stage: EXP004-C Headland Handoff & Ackermann Transition
+
+1. define explicit in-aisle entry/exit handoff poses rather than forcing the footprint to the recovered rectangle endpoint;
+2. keep strict occupied/unknown semantics and measured `mk_mini` footprint;
+3. validate `A05 -> headland -> A06` first because A05 is a B1 success and A06 is the first strict B2 recovery;
+4. use measured wheelbase / steering geometry from robot configuration for minimum-turning-radius constraints rather than inventing values;
+5. separate failure reasons into map collision, unknown overlap, insufficient headland depth, and kinematic infeasibility;
+6. only after this offline handoff test is stable, move to Nav2/runtime integration.
