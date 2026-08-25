@@ -1,0 +1,17 @@
+# Local environments and Python build/cache output
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# Large local datasets, generated maps, logs, and experiment artifacts
+date/
+logs/
+results/
+
+# Local editor and OS files
+.vscode/
+.idea/
+*.swp
+.DS_Store
