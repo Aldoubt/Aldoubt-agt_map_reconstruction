@@ -105,11 +105,31 @@ Handoff:
 
 ## EXP003 Navigation Map V2 Interface Validation
 
+Status: completed, superseded by EXP003.1 static obstacle policy correction
+
+Goal:
+
+Convert recovered semantic geometry into a navigation-oriented static-map bundle and quantify aisle connectivity.
+
+Original policy:
+
+```text
+aisle prior              -> free
+ridge / wall             -> hard occupied
+obstacle / step / pillar -> candidate layer
+```
+
+The original replay produced 20 / 20 aisles at 0.30 m equivalent clearance, but review of the generated PGM showed that pillar cells inside aisle polygons could be promoted to free. That result is therefore retained only as a pre-correction baseline.
+
+---
+
+## EXP003.1 Static Obstacle Policy Correction
+
 Status: implemented and replay-validated on 2026-08-25
 
 Goal:
 
-Convert recovered semantic geometry into a navigation-oriented static-map bundle while keeping conservative obstacle candidates separate from permanent static obstacles.
+Prevent permanent greenhouse structure from being erased by the recovered aisle prior while avoiding a return to overly conservative candidate blocking.
 
 Inputs:
 
@@ -118,21 +138,28 @@ semantic_labels.npy
 aisle_rectangles.json
 ```
 
-Reference dataset properties for this validation round:
+Reference dataset:
 
 - grid: 912 x 797
 - resolution: 0.05 m/cell
 - aisles: 20
-- ridges: 20
+- pillar cells: 2181
 
-Map policy:
+Corrected semantic priority:
 
 ```text
-aisle prior                     -> free
-ridge / wall                    -> hard occupied
-obstacle / step / pillar        -> candidate layer
-outside confirmed aisle/geometry -> unknown
+unknown default
+      |
+      v
+aisle prior / semantic aisle -> free
+      |
+      v
+ridge / wall / pillar       -> hard occupied (highest priority)
+
+obstacle_candidate / step_candidate -> advisory candidate_mask only
 ```
+
+The all-candidate-as-unknown policy was tested and rejected for this dataset because it reduced 0.30 m aisle connectivity to 12 / 20. Pillar-only structural blocking preserves substantially more corridor continuity while fixing the observed safety error.
 
 Static-map grayscale contract:
 
@@ -166,6 +193,7 @@ results/EXP003/navigation-map-v2/
 ├── navigation_base_map.pgm
 ├── navigation_base_map.yaml
 ├── candidate_mask.npy
+├── static_obstacle_mask.npy
 └── validation.json
 ```
 
@@ -179,41 +207,44 @@ python tools/build_navigation_map.py \
   --resolution 0.05
 ```
 
-Reference replay metrics from the current semantic assets:
+Reference replay metrics after the correction:
 
 | clearance radius | equivalent diameter | aisle connectivity |
 | ---: | ---: | ---: |
 | 0.20 m | 0.40 m | 20 / 20 |
 | 0.25 m | 0.50 m | 20 / 20 |
-| 0.30 m | 0.60 m | 20 / 20 |
-| 0.35 m | 0.70 m | 19 / 20 |
-| 0.40 m | 0.80 m | 19 / 20 |
-| 0.50 m | 1.00 m | 18 / 20 |
+| 0.30 m | 0.60 m | 17 / 20 |
+| 0.35 m | 0.70 m | 14 / 20 |
+| 0.40 m | 0.80 m | 13 / 20 |
+| 0.50 m | 1.00 m | 12 / 20 |
 
 Additional replay metrics:
 
 - canonical gray values: `[0, 205, 254]`
 - map-server YAML validation: pass
-- candidate cells: 8010
-- hard obstacle cells: 76311
-- base-map free cells: 353885
-- base-map unknown cells: 296668
-- base-map occupied cells: 76311
+- pillar cells: 2181
+- pillar cells exported as free: 0
+- static obstacle semantic validation: pass
+- advisory candidate cells: 5829
 
-Failure cases:
+Failure cases at 0.30 m radius:
 
-- A03 (`width_m ~= 0.70`) fails at clearance radius >= 0.35 m.
-- A01 (`width_m ~= 0.90`) additionally fails at clearance radius 0.50 m.
-- These results are static 2D clearance tests, not proof of Ackermann turning feasibility or localization robustness.
+- A01
+- A15
+- A18
+
+Interpretation:
+
+These failures are more informative than the original 20 / 20 result because the corrected map no longer erases structural pillar geometry. They are not yet proof that the physical robot cannot traverse the aisles; circular clearance is only a conservative proxy for the real polygon footprint and vehicle pose.
 
 Conclusion:
 
-The navigation-map-v2 policy removes conservative candidate geometry from the permanent static obstacle layer while preserving ridge/wall geometry. On the current reconstructed map, all 20 aisles remain connected through a 0.30 m robot-equivalent safety radius. This is sufficient to move from map-shape inspection to controlled single-aisle navigation tests, but it is not yet sufficient to claim full-site Nav2 readiness.
+EXP003.1 fixes the static-map semantic bug that allowed pillars to become white/free. The corrected map is suitable as the input to robot-scale validation. Obstacle and step candidates remain outside the permanent hard-obstacle layer so local perception can still resolve uncertain geometry at runtime.
 
-Next stage:
+Next stage: EXP004 Robot Footprint & Route Validation
 
-1. review A03 and the R02-R04 region against the source PCD;
-2. verify A16 / R16-R17 spacing anomaly as a true wide aisle or a missing ridge;
-3. validate the actual robot polygon footprint instead of only circular-equivalent radii;
-4. test one aisle end-to-end, then headland exit, then aisle-to-aisle transition;
-5. keep dynamic MID360 obstacles in the local costmap rather than baking them into this static base map.
+1. validate the actual robot polygon footprint against all aisles;
+2. use A05 as the first single-aisle route validation case;
+3. inspect A01, A15, and A18 as pillar-sensitive failure cases;
+4. validate headland exit and A05 -> A06 transition with vehicle kinematic constraints;
+5. only after the offline geometry passes, move to Nav2 runtime tests.
