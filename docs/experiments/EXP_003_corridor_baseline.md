@@ -1,44 +1,10 @@
-# EXP_003 Corridor Extraction Baseline
+# Historical Corridor Note (Pre-EXP002)
 
-## Goal
+This file predates the canonical EXP002 A/B/C corridor experiment and used the
+temporary name `EXP_003`. It is retained only as a historical pointer.
 
-Move from ground segmentation to navigation-oriented agricultural corridor recovery.
-
-## Input
-
-FAST-LIVO2 LIO-only PCD map.
-
-## Pipeline
-
-PCD
-
--> height grid
-
--> traversability grid
-
--> connected region filtering
-
--> corridor mask
-
--> skeleton centerline
-
-## Current implementation
-
-- Simple geometric corridor extraction
-- Small region removal
-- Optional skeletonization
-
-## Known limitations
-
-- Does not yet use row direction
-- Does not distinguish ridge from vegetation
-- No centerline smoothing
-
-## Next experiment
-
-Add agricultural row-aware extraction:
-
-- orientation estimation
-- parallel row detection
-- gap filling
-- waypoint export
+The old connected-region/skeleton idea was superseded by EXP002 corridor
+recovery. The current EXP003 identifier belongs to the conservative ground
+evidence map. Commands, results, conclusions, acceptance state, and the
+deferred EXP004 feasibility probe are maintained only in
+[`../EXPERIMENTS.md`](../EXPERIMENTS.md).
