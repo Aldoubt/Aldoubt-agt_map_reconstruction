@@ -14,6 +14,7 @@ Current scope:
 - traversability grid generation
 - agricultural corridor recovery
 - navigation-oriented static map export and validation
+- polygon-footprint aisle validation
 - visualization comparison reports
 
 The repository remains independent from the navigation runtime. It produces and validates map assets before they are integrated into planners or Nav2.
@@ -42,12 +43,16 @@ PCD
  |       |- ridge / wall / pillar static obstacles
  |       `- obstacle / step candidates
  |
- `-- navigation map v2
-         |- navigation_base_map.pgm
-         |- navigation_base_map.yaml
-         |- candidate_mask.npy
-         |- static_obstacle_mask.npy
-         `- validation.json
+ +-- navigation map v2
+ |       |- navigation_base_map.pgm
+ |       |- navigation_base_map.yaml
+ |       |- candidate_mask.npy
+ |       |- static_obstacle_mask.npy
+ |       `- validation.json
+ |
+ `-- EXP004 footprint validation
+         |- aisle_footprint_validation.json
+         `- aisle_footprint_validation.csv
 ```
 
 ## Navigation map v2
@@ -78,6 +83,56 @@ Default clearance checks use radii:
 ```
 
 These checks validate static-map corridor connectivity. They do not replace vehicle-footprint, local-costmap, localization, headland-turning, or full Nav2 runtime tests.
+
+## EXP004-A polygon footprint validation
+
+EXP004-A replaces the circular-equivalent clearance proxy with an explicit robot polygon. It is intentionally a **strict aisle-centerline baseline**: the footprint is aligned with each recovered aisle and sampled along that centerline. It does not yet search for a laterally shifted path around pillars.
+
+Footprint JSON uses metres in the robot `base_link` frame (`+x` forward, `+y` left):
+
+```json
+{
+  "name": "my_robot",
+  "polygon_xy_m": [
+    [0.50, 0.30],
+    [0.50, -0.30],
+    [-0.50, -0.30],
+    [-0.50, 0.30]
+  ]
+}
+```
+
+Replace the example coordinates with the measured physical footprint before treating the result as a robot acceptance test.
+
+Run:
+
+```bash
+python tools/validate_robot_footprint.py \
+  --map-pgm results/EXP003/navigation-map-v2/navigation_base_map.pgm \
+  --map-yaml results/EXP003/navigation-map-v2/navigation_base_map.yaml \
+  --aisles /path/to/aisle_rectangles.json \
+  --footprint /path/to/robot_footprint.json \
+  --candidate-mask results/EXP003/navigation-map-v2/candidate_mask.npy \
+  --output results/EXP004/robot-footprint-v1 \
+  --sample-spacing 0.10
+```
+
+Policy:
+
+- occupied cells always fail a sampled pose;
+- unknown cells fail by default; use `--allow-unknown` only for diagnostic comparison;
+- candidate-mask overlap is reported but remains advisory;
+- each aisle reports sampled pose count, occupied/unknown/candidate overlap counts, first failure reason and minimum clearance to the active blocking policy.
+
+Outputs:
+
+```text
+results/EXP004/robot-footprint-v1/
+├── aisle_footprint_validation.json
+└── aisle_footprint_validation.csv
+```
+
+The next stage after EXP004-A is route search within the aisle free-space, so a centerline collision does not automatically mean the aisle is physically unreachable.
 
 ## Experiment tracking
 
