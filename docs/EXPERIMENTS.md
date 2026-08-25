@@ -241,10 +241,108 @@ Conclusion:
 
 EXP003.1 fixes the static-map semantic bug that allowed pillars to become white/free. The corrected map is suitable as the input to robot-scale validation. Obstacle and step candidates remain outside the permanent hard-obstacle layer so local perception can still resolve uncertain geometry at runtime.
 
-Next stage: EXP004 Robot Footprint & Route Validation
+Handoff:
 
-1. validate the actual robot polygon footprint against all aisles;
-2. use A05 as the first single-aisle route validation case;
-3. inspect A01, A15, and A18 as pillar-sensitive failure cases;
-4. validate headland exit and A05 -> A06 transition with vehicle kinematic constraints;
-5. only after the offline geometry passes, move to Nav2 runtime tests.
+- EXP004 owns polygon-footprint and route-level validation.
+
+---
+
+## EXP004 Robot Footprint & Route Validation
+
+### EXP004-A Polygon Footprint Centerline Baseline
+
+Status: implementation complete; physical-robot acceptance pending measured footprint input
+
+Goal:
+
+Replace circular-equivalent clearance with an explicit polygon footprint and determine whether the recovered aisle centerline itself is collision-free for that footprint.
+
+Inputs:
+
+```text
+results/EXP003/navigation-map-v2/navigation_base_map.pgm
+results/EXP003/navigation-map-v2/navigation_base_map.yaml
+results/EXP003/navigation-map-v2/candidate_mask.npy
+aisle_rectangles.json
+robot_footprint.json
+```
+
+Footprint contract:
+
+```json
+{
+  "name": "robot_name",
+  "polygon_xy_m": [
+    [0.50, 0.30],
+    [0.50, -0.30],
+    [-0.50, -0.30],
+    [-0.50, 0.30]
+  ]
+}
+```
+
+Coordinates are metres in the robot `base_link` frame with `+x` forward and `+y` left. The numerical polygon above is an example only and must be replaced with measured geometry before acceptance.
+
+Validation policy:
+
+```text
+occupied            -> fail sampled pose
+unknown (default)    -> fail sampled pose
+candidate_mask       -> report overlap only
+out of map           -> fail sampled pose
+```
+
+`--allow-unknown` exists only for diagnostic comparison. EXP004-A samples the footprint strictly along the recovered aisle centerline; it does not search for a laterally shifted collision-free route.
+
+Implementation:
+
+```text
+src/agt_map_reconstruction/maps/footprint_validation.py
+tools/validate_robot_footprint.py
+tests/test_footprint_validation.py
+```
+
+Output:
+
+```text
+results/EXP004/robot-footprint-v1/
+├── aisle_footprint_validation.json
+└── aisle_footprint_validation.csv
+```
+
+Per-aisle metrics:
+
+- sampled pose count
+- occupied collision pose count
+- unknown overlap pose count
+- advisory candidate overlap pose count
+- out-of-bounds pose count
+- minimum clearance to the active blocking policy
+- first failure reason and first failure pose
+
+Test status:
+
+```text
+pytest -q tests/test_footprint_validation.py
+6 passed
+```
+
+Smoke replay on the current corrected 912 x 797 map:
+
+- sample spacing: 0.10 m
+- benchmark-only footprint: 1.00 m x 0.60 m centred rectangle
+- default unknown-blocking policy: 1 / 20 centerlines pass (`A14`)
+- diagnostic `--allow-unknown`: 4 / 20 centerlines pass (`A03`, `A08`, `A12`, `A14`)
+
+This benchmark is **not a physical robot result**. It validates the EXP004-A pipeline and reveals that strict geometric centerlines frequently intersect static structure or unknown cells. EXP003 clearance connectivity can still be higher because it only asks whether some connected free corridor exists and may permit lateral deviation around obstacles.
+
+Conclusion:
+
+EXP004-A is suitable as a strict centerline baseline and as a regression test for any measured polygon footprint. A centerline failure must not be interpreted as aisle-unreachable until route search is allowed to shift laterally inside the aisle.
+
+Next stage: EXP004-B In-Aisle Route Search
+
+1. ingest the measured robot polygon and freeze it as the EXP004 acceptance footprint;
+2. search multiple lateral offsets / a collision-free path inside each aisle rather than forcing the recovered centerline;
+3. use A05 as the first route case and compare centerline vs recovered collision-free route;
+4. only after in-aisle route validation, add headland exit and A05 -> A06 Ackermann transition constraints.
