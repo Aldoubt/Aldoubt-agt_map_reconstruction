@@ -56,6 +56,9 @@ def main():
     print('map_server_yaml_valid:', validation['map_server_yaml_valid'])
     print('gray_semantics_valid:', validation['gray_semantics_valid'])
     print('candidate_cells:', validation['candidate_cell_count'])
+    print('pillar_cells:', validation['pillar_cell_count'])
+    print('pillar_as_free_cells:', validation['pillar_as_free_cell_count'])
+    print('static_obstacle_semantics_valid:', validation['static_obstacle_semantics_valid'])
     for key, metrics in validation['clearance_tests'].items():
         print(
             f"clearance {key} m: "

@@ -15,8 +15,9 @@ OCCUPIED_VALUE = np.uint8(0)
 UNKNOWN_VALUE = np.uint8(205)
 FREE_VALUE = np.uint8(254)
 
-HARD_LABELS = (2, 4)  # ridge, wall
-CANDIDATE_LABELS = (3, 5, 6)  # obstacle candidate, step, pillar
+HARD_LABELS = (2, 4, 6)  # ridge, wall, pillar
+CANDIDATE_LABELS = (3, 5)  # obstacle candidate, step candidate
+PILLAR_LABELS = (6,)
 
 
 @dataclass(frozen=True)
@@ -50,6 +51,8 @@ def build_navigation_layers(semantic_labels, aisle_rectangles):
 
     base = np.full(semantic.shape, UNKNOWN_VALUE, dtype=np.uint8)
     base[free] = FREE_VALUE
+    # Structural geometry has the highest priority. Pillars are static
+    # collision geometry and must never be promoted to free by the aisle prior.
     base[hard] = OCCUPIED_VALUE
 
     return NavigationLayers(
@@ -182,6 +185,19 @@ def write_navigation_bundle(semantic_labels, aisle_rectangles, output_dir,
         ),
         'candidate_cell_count': int(layers.candidate_mask.sum()),
         'hard_obstacle_cell_count': int(layers.hard_obstacle_mask.sum()),
+        'hard_obstacle_as_free_cell_count': int(
+            np.count_nonzero(layers.hard_obstacle_mask & (layers.base_map == FREE_VALUE))
+        ),
+        'static_obstacle_semantics_valid': bool(
+            not np.any(layers.hard_obstacle_mask & (layers.base_map == FREE_VALUE))
+        ),
+        'pillar_cell_count': int(np.count_nonzero(np.isin(np.asarray(semantic_labels), PILLAR_LABELS))),
+        'pillar_as_free_cell_count': int(
+            np.count_nonzero(
+                np.isin(np.asarray(semantic_labels), PILLAR_LABELS)
+                & (layers.base_map == FREE_VALUE)
+            )
+        ),
         'free_cell_count': int(np.count_nonzero(layers.base_map == FREE_VALUE)),
         'unknown_cell_count': int(np.count_nonzero(layers.base_map == UNKNOWN_VALUE)),
         'occupied_cell_count': int(np.count_nonzero(layers.base_map == OCCUPIED_VALUE)),
@@ -191,6 +207,7 @@ def write_navigation_bundle(semantic_labels, aisle_rectangles, output_dir,
     with (output / 'navigation_base_map.yaml').open('w', encoding='utf-8') as stream:
         yaml.safe_dump(map_yaml, stream, sort_keys=False)
     np.save(output / 'candidate_mask.npy', layers.candidate_mask.astype(np.uint8))
+    np.save(output / 'static_obstacle_mask.npy', layers.hard_obstacle_mask.astype(np.uint8))
     with (output / 'validation.json').open('w', encoding='utf-8') as stream:
         json.dump(validation, stream, indent=2, sort_keys=True)
         stream.write('\n')

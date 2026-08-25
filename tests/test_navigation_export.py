@@ -28,16 +28,22 @@ def _rect(x0, y0, x1, y1, aisle_id=1, width_m=1.0, length_m=4.0):
     }
 
 
-def test_base_map_recovers_aisle_prior_without_erasing_hard_obstacles():
+def test_base_map_keeps_candidates_advisory_but_pillars_hard():
     semantic = np.zeros((7, 10), dtype=np.uint8)
     semantic[2:5, 1:9] = 1
-    semantic[3, 4] = 5
-    semantic[3, 6] = 2
+    semantic[3, 4] = 5  # step candidate remains advisory
+    semantic[3, 5] = 6  # pillar is structural
+    semantic[3, 6] = 2  # ridge is structural
 
     layers = build_navigation_layers(semantic, [_rect(1, 2, 8, 4)])
 
     assert layers.base_map[3, 4] == FREE_VALUE
     assert bool(layers.candidate_mask[3, 4]) is True
+
+    assert layers.base_map[3, 5] == OCCUPIED_VALUE
+    assert bool(layers.hard_obstacle_mask[3, 5]) is True
+    assert bool(layers.candidate_mask[3, 5]) is False
+
     assert layers.base_map[3, 6] == OCCUPIED_VALUE
     assert layers.base_map[0, 0] == UNKNOWN_VALUE
     assert layers.base_map[2, 2] == FREE_VALUE
@@ -84,12 +90,13 @@ def test_validation_rejects_noncanonical_gray_values():
     assert result['unexpected_gray_values'] == [127]
 
 
-def test_write_navigation_bundle_creates_nav2_and_validation_artifacts(tmp_path):
+def test_write_navigation_bundle_creates_static_mask_and_pillar_validation(tmp_path):
     from agt_map_reconstruction.maps.navigation_export import write_navigation_bundle
 
     semantic = np.zeros((6, 10), dtype=np.uint8)
     semantic[2:5, 1:9] = 1
-    semantic[3, 4] = 6
+    semantic[3, 3] = 5  # step candidate
+    semantic[3, 4] = 6  # pillar
     rectangles = [_rect(1, 2, 8, 4, width_m=0.75, length_m=0.35)]
 
     result = write_navigation_bundle(
@@ -105,24 +112,31 @@ def test_write_navigation_bundle_creates_nav2_and_validation_artifacts(tmp_path)
         'navigation_base_map.pgm',
         'navigation_base_map.yaml',
         'candidate_mask.npy',
+        'static_obstacle_mask.npy',
         'validation.json',
     }
     assert expected.issubset({p.name for p in tmp_path.iterdir()})
     assert result['validation']['map_server_yaml_valid'] is True
     assert result['validation']['candidate_cell_count'] == 1
+    assert result['validation']['pillar_cell_count'] == 1
+    assert result['validation']['pillar_as_free_cell_count'] == 0
+    assert result['validation']['hard_obstacle_as_free_cell_count'] == 0
+    assert result['validation']['static_obstacle_semantics_valid'] is True
+    assert result['layers'].base_map[3, 4] == OCCUPIED_VALUE
 
     with open(tmp_path / 'navigation_base_map.pgm', 'rb') as stream:
         header = stream.readline().strip()
     assert header == b'P5'
 
     payload = json.loads((tmp_path / 'validation.json').read_text())
-    assert payload['map_server_yaml_valid'] is True
-    assert payload['candidate_cell_count'] == 1
+    assert payload['pillar_as_free_cell_count'] == 0
+    assert payload['static_obstacle_semantics_valid'] is True
 
 
 def test_build_navigation_map_cli_writes_bundle(tmp_path):
     semantic = np.zeros((8, 12), dtype=np.uint8)
     semantic[2:6, 1:11] = 1
+    semantic[3, 4] = 6
     semantic_path = tmp_path / 'semantic_labels.npy'
     np.save(semantic_path, semantic)
 
@@ -150,4 +164,6 @@ def test_build_navigation_map_cli_writes_bundle(tmp_path):
     assert completed.returncode == 0, completed.stderr
     assert (output / 'navigation_base_map.yaml').exists()
     assert (output / 'validation.json').exists()
+    assert (output / 'static_obstacle_mask.npy').exists()
+    assert 'pillar_as_free_cells: 0' in completed.stdout
     assert 'clearance 0.10 m:' in completed.stdout
