@@ -16,6 +16,7 @@ Current scope:
 - navigation-oriented static map export and validation
 - polygon-footprint aisle validation
 - in-aisle constant lateral-offset route search
+- smooth lateral-route geometry validation
 - visualization comparison reports
 
 The repository remains independent from the navigation runtime. It produces and validates map assets before they are integrated into planners or Nav2.
@@ -55,11 +56,19 @@ PCD
  |       |- aisle_footprint_validation.json
  |       `- aisle_footprint_validation.csv
  |
- `-- EXP004-B constant-offset search
-         |- aisle_offset_search.json
-         |- aisle_offset_search.csv
-         |- route_overlay.png
-         `- A05_route_overlay.png
+ +-- EXP004-B1 constant-offset search
+ |       |- aisle_offset_search.json
+ |       |- aisle_offset_search.csv
+ |       |- route_overlay.png
+ |       `- A05_route_overlay.png
+ |
+ `-- EXP004-B2 smooth lateral route
+         |- smooth_route_search.json
+         |- smooth_route_search.csv
+         |- smooth_route_overlay.png
+         |- A05_smooth_route_overlay.png
+         |- A07_smooth_route_overlay.png
+         `- A20_smooth_route_overlay.png
 ```
 
 ## Navigation map v2
@@ -141,9 +150,9 @@ results/EXP004/robot-footprint-v1/
 
 A centerline failure does not automatically mean the aisle is physically unreachable. EXP004-B tests that distinction explicitly.
 
-## EXP004-B constant lateral-offset route search
+## EXP004-B1 constant lateral-offset route search
 
-EXP004-B keeps the aisle heading fixed and tests multiple constant cross-track offsets instead of forcing the robot to drive exactly on the recovered centerline. It is deliberately simpler than A*, Hybrid A*, or Nav2: the goal is to determine whether a straight, parallel route exists before introducing a full planner.
+EXP004-B1 keeps the aisle heading fixed and tests multiple constant cross-track offsets instead of forcing the robot to drive exactly on the recovered centerline. It is deliberately simpler than A*, Hybrid A*, or Nav2: the goal is to determine whether a straight, parallel route exists before introducing a full planner.
 
 The search range is computed from the measured robot polygon and each recovered aisle width. With a centred 0.60 m-wide footprint in a 1.35 m aisle, for example, the theoretical centre offset range is approximately `[-0.375, +0.375] m`. The default search samples that range every `0.05 m` and always includes the geometric limits and zero when feasible.
 
@@ -181,7 +190,74 @@ results/EXP004/in-aisle-route-search-v1/
 └── A05_route_overlay.png
 ```
 
-`route_overlay.png` shows the recovered centreline and the selected constant-offset route (or the best failed attempt). The focus image crops the selected aisle for closer inspection. EXP004-B is still an offline geometry check and does not yet enforce Ackermann curvature or headland-turning constraints.
+`route_overlay.png` shows the recovered centreline and the selected constant-offset route (or the best failed attempt). The focus image crops the selected aisle for closer inspection.
+
+## EXP004-B2 smooth lateral route
+
+EXP004-B2 lets lateral offset change gradually along the aisle. It uses a longitudinal control lattice and dynamic programming over lateral-offset states. Each transition is validated by the continuous swept polygon footprint before the selected path is sampled at the requested resolution.
+
+Defaults:
+
+```text
+sample_spacing_m     = 0.10
+control_spacing_m    = 0.50
+offset_step_m        = 0.05
+max_offset_change_m  = 0.10
+endpoint_trim_m      = 0.00
+allow_unknown        = false
+```
+
+The route cost rewards clearance and penalizes lateral displacement, offset change, curvature proxy, and advisory candidate overlap. This is still an offline geometry validator: no Ackermann steering or minimum-turning-radius constraint is applied yet.
+
+Run the strict full-length replay and compare it with B1:
+
+```bash
+python tools/search_smooth_lateral_routes.py \
+  --map-pgm results/EXP003/navigation-map-v2/navigation_base_map.pgm \
+  --map-yaml results/EXP003/navigation-map-v2/navigation_base_map.yaml \
+  --aisles results/unified_navigation_comparison_20260824_v4/navigation_map_semantic_v2/aisle_rectangles.json \
+  --footprint robot_footprint.json \
+  --candidate-mask results/EXP003/navigation-map-v2/candidate_mask.npy \
+  --baseline-b1 results/EXP004/in-aisle-route-search-v1/aisle_offset_search.json \
+  --output results/EXP004/smooth-lateral-route-v1 \
+  --sample-spacing 0.10 \
+  --control-spacing 0.50 \
+  --offset-step 0.05 \
+  --max-offset-change 0.10 \
+  --endpoint-trim 0.0 \
+  --focus-aisles A05 A06 A07 A20
+```
+
+`failure_region` separates unresolved geometry into `entry`, `interior`, `exit`, or `aisle_geometry`. This is important because many remaining B1 failures occur exactly at aisle entry/exit and belong to the future headland handoff test rather than to in-aisle obstacle avoidance.
+
+`--endpoint-trim` is diagnostic only. For example, `--endpoint-trim 0.10` stops the in-aisle validation 0.10 m earlier at each end and measures sensitivity to the row/headland handoff boundary. A trimmed result must not be reported as strict full-length acceptance.
+
+Outputs:
+
+```text
+results/EXP004/smooth-lateral-route-v1/
+├── smooth_route_search.json
+├── smooth_route_search.csv
+├── smooth_route_overlay.png
+└── <focus>_smooth_route_overlay.png
+```
+
+Overlay legend:
+
+- orange: recovered centreline;
+- green: B2 smooth route PASS;
+- red: B1 best failed constant-offset route retained for comparison.
+
+## Test environment
+
+This repository is pure offline Python for the EXP003/EXP004 tests. In a shell where ROS 2 Humble is sourced, ROS `launch_testing` may be auto-loaded by pytest. To keep these unit tests isolated, run:
+
+```bash
+source .venv/bin/activate
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -q
+```
+
+Using `python -m pytest` also ensures pytest uses the active virtual environment instead of a user/system executable.
 
 ## Experiment tracking
 
