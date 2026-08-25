@@ -15,6 +15,7 @@ Current scope:
 - agricultural corridor recovery
 - navigation-oriented static map export and validation
 - polygon-footprint aisle validation
+- in-aisle constant lateral-offset route search
 - visualization comparison reports
 
 The repository remains independent from the navigation runtime. It produces and validates map assets before they are integrated into planners or Nav2.
@@ -50,9 +51,15 @@ PCD
  |       |- static_obstacle_mask.npy
  |       `- validation.json
  |
- `-- EXP004 footprint validation
-         |- aisle_footprint_validation.json
-         `- aisle_footprint_validation.csv
+ +-- EXP004-A footprint validation
+ |       |- aisle_footprint_validation.json
+ |       `- aisle_footprint_validation.csv
+ |
+ `-- EXP004-B constant-offset search
+         |- aisle_offset_search.json
+         |- aisle_offset_search.csv
+         |- route_overlay.png
+         `- A05_route_overlay.png
 ```
 
 ## Navigation map v2
@@ -86,7 +93,7 @@ These checks validate static-map corridor connectivity. They do not replace vehi
 
 ## EXP004-A polygon footprint validation
 
-EXP004-A replaces the circular-equivalent clearance proxy with an explicit robot polygon. It is intentionally a **strict aisle-centerline baseline**: the footprint is aligned with each recovered aisle and sampled along that centerline. It does not yet search for a laterally shifted path around pillars.
+EXP004-A replaces the circular-equivalent clearance proxy with an explicit robot polygon. It is intentionally a **strict aisle-centerline baseline**: the footprint is aligned with each recovered aisle and sampled along that centerline. It does not search for a laterally shifted path around pillars.
 
 Footprint JSON uses metres in the robot `base_link` frame (`+x` forward, `+y` left):
 
@@ -132,7 +139,49 @@ results/EXP004/robot-footprint-v1/
 └── aisle_footprint_validation.csv
 ```
 
-The next stage after EXP004-A is route search within the aisle free-space, so a centerline collision does not automatically mean the aisle is physically unreachable.
+A centerline failure does not automatically mean the aisle is physically unreachable. EXP004-B tests that distinction explicitly.
+
+## EXP004-B constant lateral-offset route search
+
+EXP004-B keeps the aisle heading fixed and tests multiple constant cross-track offsets instead of forcing the robot to drive exactly on the recovered centerline. It is deliberately simpler than A*, Hybrid A*, or Nav2: the goal is to determine whether a straight, parallel route exists before introducing a full planner.
+
+The search range is computed from the measured robot polygon and each recovered aisle width. With a centred 0.60 m-wide footprint in a 1.35 m aisle, for example, the theoretical centre offset range is approximately `[-0.375, +0.375] m`. The default search samples that range every `0.05 m` and always includes the geometric limits and zero when feasible.
+
+Run:
+
+```bash
+python tools/search_in_aisle_offsets.py \
+  --map-pgm results/EXP003/navigation-map-v2/navigation_base_map.pgm \
+  --map-yaml results/EXP003/navigation-map-v2/navigation_base_map.yaml \
+  --aisles /path/to/aisle_rectangles.json \
+  --footprint /path/to/robot_footprint.json \
+  --candidate-mask results/EXP003/navigation-map-v2/candidate_mask.npy \
+  --output results/EXP004/in-aisle-route-search-v1 \
+  --sample-spacing 0.10 \
+  --offset-step 0.05 \
+  --focus-aisle A05
+```
+
+Search policy:
+
+- occupied cells always block a route;
+- unknown cells block by default; `--allow-unknown` remains diagnostic only;
+- candidate-mask overlap is advisory and used only as a late tie-breaker;
+- a route must pass every sampled pose;
+- among passing offsets, selection first maximizes the 10th-percentile blocked-space clearance (`clearance_p10_m`), then minimum clearance, then candidate overlap and absolute offset;
+- if no route passes, `best_attempt_*` reports the offset with the fewest blocking poses for diagnosis.
+
+Outputs:
+
+```text
+results/EXP004/in-aisle-route-search-v1/
+├── aisle_offset_search.json
+├── aisle_offset_search.csv
+├── route_overlay.png
+└── A05_route_overlay.png
+```
+
+`route_overlay.png` shows the recovered centreline and the selected constant-offset route (or the best failed attempt). The focus image crops the selected aisle for closer inspection. EXP004-B is still an offline geometry check and does not yet enforce Ackermann curvature or headland-turning constraints.
 
 ## Experiment tracking
 

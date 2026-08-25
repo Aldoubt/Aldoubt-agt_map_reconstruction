@@ -251,7 +251,7 @@ Handoff:
 
 ### EXP004-A Polygon Footprint Centerline Baseline
 
-Status: implementation complete; physical-robot acceptance pending measured footprint input
+Status: implementation complete; replay-validated with measured `mk_mini` footprint on 2026-08-25
 
 Goal:
 
@@ -267,21 +267,21 @@ aisle_rectangles.json
 robot_footprint.json
 ```
 
-Footprint contract:
+Measured replay footprint:
 
 ```json
 {
-  "name": "robot_name",
+  "name": "mk_mini",
   "polygon_xy_m": [
-    [0.50, 0.30],
-    [0.50, -0.30],
-    [-0.50, -0.30],
-    [-0.50, 0.30]
+    [0.42, 0.30],
+    [0.42, -0.30],
+    [-0.42, -0.30],
+    [-0.42, 0.30]
   ]
 }
 ```
 
-Coordinates are metres in the robot `base_link` frame with `+x` forward and `+y` left. The numerical polygon above is an example only and must be replaced with measured geometry before acceptance.
+This is a 0.84 m x 0.60 m base-link-centred footprint. Coordinates are metres in the robot `base_link` frame with `+x` forward and `+y` left.
 
 Validation policy:
 
@@ -327,22 +327,154 @@ pytest -q tests/test_footprint_validation.py
 6 passed
 ```
 
-Smoke replay on the current corrected 912 x 797 map:
+Measured-footprint replay:
 
+- resolution: 0.05 m
 - sample spacing: 0.10 m
-- benchmark-only footprint: 1.00 m x 0.60 m centred rectangle
-- default unknown-blocking policy: 1 / 20 centerlines pass (`A14`)
-- diagnostic `--allow-unknown`: 4 / 20 centerlines pass (`A03`, `A08`, `A12`, `A14`)
+- `allow_unknown: false`
+- centreline pass: 1 / 20
+- passing aisle: `A14`
+- failing aisles: `A01 A02 A03 A04 A05 A06 A07 A08 A09 A10 A11 A12 A13 A15 A16 A17 A18 A19 A20`
 
-This benchmark is **not a physical robot result**. It validates the EXP004-A pipeline and reveals that strict geometric centerlines frequently intersect static structure or unknown cells. EXP003 clearance connectivity can still be higher because it only asks whether some connected free corridor exists and may permit lateral deviation around obstacles.
+Important cases:
+
+- `A03`, `A08`, and `A12` have zero hard collisions and fail only on unknown overlap.
+- `A04`, `A07`, `A10`, `A19`, and `A20` have only 1-3 hard-collision poses on the strict centreline.
+- `A14` passes but its minimum blocked-space clearance is only 0.05 m, so it is a geometric pass rather than a robust navigation acceptance result.
 
 Conclusion:
 
-EXP004-A is suitable as a strict centerline baseline and as a regression test for any measured polygon footprint. A centerline failure must not be interpreted as aisle-unreachable until route search is allowed to shift laterally inside the aisle.
+EXP004-A establishes a strict physical-footprint centreline baseline. The measured `mk_mini` result confirms that centreline validity is much stricter than EXP003 corridor connectivity and motivates a route-level lateral search rather than further static-map editing.
 
-Next stage: EXP004-B In-Aisle Route Search
+---
 
-1. ingest the measured robot polygon and freeze it as the EXP004 acceptance footprint;
-2. search multiple lateral offsets / a collision-free path inside each aisle rather than forcing the recovered centerline;
-3. use A05 as the first route case and compare centerline vs recovered collision-free route;
-4. only after in-aisle route validation, add headland exit and A05 -> A06 Ackermann transition constraints.
+### EXP004-B1 Constant Lateral Offset Search
+
+Status: implemented, tested, and replay-validated on 2026-08-25
+
+Goal:
+
+Determine whether each aisle contains a collision-free route that stays parallel to the recovered row direction but shifts laterally away from pillars, wall geometry, or unknown boundaries. This stage intentionally avoids A*, Hybrid A*, Nav2, and variable-curvature planning.
+
+Search model:
+
+```text
+recovered aisle centreline
+          |
+          +-- offset -N * step
+          +-- ...
+          +-- offset 0
+          +-- ...
+          `-- offset +N * step
+                    |
+                    v
+      polygon footprint sweep
+                    |
+                    v
+     select best passing offset
+```
+
+The theoretical offset bounds are computed from each recovered aisle width and the measured footprint lateral extent. Search defaults:
+
+```text
+sample_spacing_m = 0.10
+offset_step_m    = 0.05
+allow_unknown    = false
+```
+
+Validation policy is unchanged from EXP004-A:
+
+```text
+occupied       -> block
+unknown        -> block by default
+candidate_mask -> advisory only
+out of map     -> block
+```
+
+Route selection:
+
+1. every sampled pose must pass;
+2. maximize the 10th-percentile blocked-space clearance (`clearance_p10_m`);
+3. then maximize minimum clearance;
+4. then minimize advisory candidate overlap;
+5. then prefer the smaller absolute offset.
+
+`clearance_p10_m` is used before strict minimum clearance because the strict minimum is frequently dominated by the one-cell unknown boundary at aisle entry/exit and is not discriminative between lateral routes.
+
+If no offset passes, `best_attempt_*` records the route with the fewest blocking poses so failures remain quantitatively useful.
+
+Implementation:
+
+```text
+src/agt_map_reconstruction/maps/in_aisle_route_search.py
+tools/search_in_aisle_offsets.py
+tests/test_in_aisle_route_search.py
+```
+
+Output:
+
+```text
+results/EXP004/in-aisle-route-search-v1/
+├── aisle_offset_search.json
+├── aisle_offset_search.csv
+├── route_overlay.png
+└── A05_route_overlay.png
+```
+
+Test status:
+
+```text
+pytest -q tests/test_in_aisle_route_search.py
+6 passed
+```
+
+The EXP004-B evaluator was cross-checked at `offset=0` against the measured-footprint EXP004-A output. For all 20 aisles, pose count, occupied collision count, unknown-overlap count, and PASS/FAIL matched exactly.
+
+Reference replay with measured `mk_mini` footprint:
+
+```text
+centreline pass:      1 / 20
+offset-route pass:    8 / 20
+recovered routes:     7
+strict failures:     12
+```
+
+Recovered by constant lateral offset:
+
+| aisle | best offset | interpretation |
+| --- | ---: | --- |
+| A04 | +0.05 m | small centreline correction |
+| A05 | -0.30 m | large but feasible constant shift |
+| A08 | -0.05 m | removes unknown/edge conflict |
+| A11 | +0.30 m | large constant shift |
+| A12 | +0.05 m | removes unknown/edge conflict |
+| A16 | +0.20 m | avoids centreline structural collision |
+| A19 | -0.10 m | removes sparse collision |
+
+`A14` remains the only centreline route and is also accepted by EXP004-B.
+
+Strictly failing after constant-offset search:
+
+```text
+A01 A02 A03 A06 A07 A09 A10 A13 A15 A17 A18 A20
+```
+
+Useful failure diagnostics:
+
+- `A07`: best attempt `-0.05 m`, only 1 remaining blocking/collision pose.
+- `A20`: best attempt `-0.20 m`, only 1 remaining blocking/collision pose.
+- `A03`: no hard collision on centreline; strict failure is caused by unknown overlap. Diagnostic `--allow-unknown` increases the total EXP004-B pass count from 8 / 20 to 9 / 20, but unknown remains blocking for acceptance.
+- `A05`: centreline fails, but a full constant route passes at `-0.30 m`; this validates the purpose of EXP004-B and provides the first detailed in-aisle route case.
+
+Conclusion:
+
+Constant lateral search recovers 7 additional measured-footprint routes without modifying the static map. This demonstrates that a substantial portion of the EXP004-A failures were centreline-placement failures rather than aisle-unreachable failures. The remaining 12 aisles should not be forced into PASS by changing the PGM; they require either a spatially varying lateral route or source-geometry review.
+
+Next stage: EXP004-B2 Smooth Lateral Route
+
+1. allow the lateral offset to vary gradually along the aisle instead of remaining constant;
+2. preserve the same polygon collision and unknown-blocking policy;
+3. penalize offset change / curvature and reward clearance;
+4. start with `A07` and `A20`, where only one blocking pose remains after B1;
+5. retain `A05` as the reference success case;
+6. only after in-aisle route geometry is stable, add headland exit and `A05 -> A06` Ackermann transition constraints.
