@@ -39,26 +39,27 @@ PCD
  |
  +-- semantic geometry
  |       |- aisle prior
- |       |- ridge / wall hard obstacles
- |       `- obstacle / step / pillar candidates
+ |       |- ridge / wall / pillar static obstacles
+ |       `- obstacle / step candidates
  |
  `-- navigation map v2
          |- navigation_base_map.pgm
          |- navigation_base_map.yaml
          |- candidate_mask.npy
+         |- static_obstacle_mask.npy
          `- validation.json
 ```
 
 ## Navigation map v2
 
-`navigation_base_map` intentionally separates permanent geometry from conservative candidates:
+`navigation_base_map` uses an explicit semantic priority for navigation safety:
 
 - aisle geometry is used as a free-space prior;
-- ridge and wall labels remain hard occupied cells;
-- obstacle, step, and pillar candidates are exported separately instead of being permanently burned into the static map;
+- ridge, wall, and pillar labels are static hard obstacles and override the aisle prior;
+- obstacle and step candidates remain an advisory candidate layer instead of being permanently burned into the static map;
 - the exported PGM uses only `0 / 205 / 254` for occupied / unknown / free;
 - the YAML uses Nav2 trinary thresholds with `free_thresh < occupied_thresh`;
-- `validation.json` reports aisle connectivity at multiple robot-equivalent clearance radii.
+- `validation.json` reports aisle connectivity at multiple robot-equivalent clearance radii and verifies that no static obstacle is exported as free.
 
 Build a bundle from the semantic reconstruction outputs:
 
