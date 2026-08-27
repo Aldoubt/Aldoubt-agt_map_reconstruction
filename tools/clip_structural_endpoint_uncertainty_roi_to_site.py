@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Clip frozen D3.1 uncertainty ROI masks to enclosed site interior."""
+"""Clip frozen D3.1 uncertainty ROI masks to an anchor-validated site interior."""
 
 from __future__ import annotations
 
@@ -15,8 +15,8 @@ def build_parser():
     parser = argparse.ArgumentParser(
         description=(
             "Intersect the existing unbounded D3.1 uncertainty ROI partition with "
-            "a flood-filled enclosed non-HARD site interior. The original ROI remains "
-            "unchanged and is preserved as provenance."
+            "an anchor-validated flood-filled non-HARD site interior. The original "
+            "ROI remains unchanged and is preserved as provenance."
         )
     )
     parser.add_argument("--roi", required=True)
@@ -48,6 +48,20 @@ def _blend(image, mask, color, alpha):
     cv2.addWeighted(overlay, float(alpha), image, 1.0 - float(alpha), 0.0, dst=image)
 
 
+def _require_anchor_validated_site(site_payload):
+    if site_payload.get("status") != "ok":
+        raise ValueError("site interior flood fill is not valid for clipping")
+    if site_payload.get("interior_anchor_validation_requested") is not True:
+        raise ValueError(
+            "site interior must be anchor-validated before clipping; topology-only "
+            "site masks are diagnostic and cannot define the physical ROI"
+        )
+    if site_payload.get("interior_anchor_validation_passed") is not True:
+        raise ValueError("site interior anchor validation did not pass")
+    if int(site_payload.get("interior_anchor_exterior_reachable_cell_count", 0)) != 0:
+        raise ValueError("site interior contains exterior-reachable trusted anchors")
+
+
 def main():
     args = build_parser().parse_args()
 
@@ -64,8 +78,7 @@ def main():
 
     roi_payload = json.loads(roi_path.read_text(encoding="utf-8"))
     site_payload = json.loads(site_path.read_text(encoding="utf-8"))
-    if site_payload.get("status") != "ok":
-        raise ValueError("site interior flood fill is not valid for clipping")
+    _require_anchor_validated_site(site_payload)
 
     roi_masks = _load_masks(roi_payload, roi_path.parent)
     site_masks = _load_masks(site_payload, site_path.parent)
@@ -78,6 +91,8 @@ def main():
     )
     result["uncertainty_quantile"] = roi_payload.get("uncertainty_quantile")
     result["unresolved_ridge_ids"] = roi_payload.get("unresolved_ridge_ids", [])
+    result["site_interior_anchor_validated"] = True
+    result["site_interior_status_basis"] = site_payload.get("status_basis")
     result["sources"] = {
         "unbounded_roi": str(roi_path),
         "site_interior": str(site_path),
@@ -119,7 +134,7 @@ def main():
     display = np.flipud(image).copy()
     cv2.rectangle(display, (8, 8), (760, 140), (30, 30, 30), -1)
     legend = [
-        ("green/blue: site-interior clipped conservative entry/exit ROI", (0, 220, 0)),
+        ("green/blue: anchor-validated site-interior clipped entry/exit ROI", (0, 220, 0)),
         ("orange/blue bands: clipped fused endpoint uncertainty", (0, 165, 255)),
         ("red: clipped structurally unresolved cross strip", (0, 0, 255)),
         ("magenta tint: exterior-reachable non-HARD removed from evaluation", (255, 0, 255)),
@@ -147,6 +162,7 @@ def main():
             f"removed_exterior={item['removed_exterior_cell_count']} "
             f"retained_fraction={item['retained_fraction']:.6f}"
         )
+    print("site_interior_anchor_validated: true")
     print("unbounded_roi_preserved: true")
     print("site_interior_mask_is_semantic_free: false")
     print("structural_geometry_modified: false")
