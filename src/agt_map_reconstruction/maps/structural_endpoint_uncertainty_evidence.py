@@ -103,15 +103,28 @@ def _roi_stats(base, ground, scan, roi, *, min_repeated_scans, ray=None):
             scan_observed_count,
             trusted_ground_count,
         ),
+        "scan_observed_fraction_of_unknown": _fraction(
+            scan_observed_count,
+            unknown_count,
+        ),
         "repeated_scan_fraction_of_trusted_ground_unknown": _fraction(
             repeated_scan_count,
             trusted_ground_count,
+        ),
+        "repeated_scan_fraction_of_unknown": _fraction(
+            repeated_scan_count,
+            unknown_count,
         ),
         "ray_supported_unknown_cell_count": ray_supported_count,
         "ray_supported_fraction_of_trusted_ground_unknown": (
             None
             if ray_supported_count is None
             else _fraction(ray_supported_count, trusted_ground_count)
+        ),
+        "ray_supported_fraction_of_unknown": (
+            None
+            if ray_supported_count is None
+            else _fraction(ray_supported_count, unknown_count)
         ),
         "unknown_partition_cell_count": int(np.count_nonzero(partition)),
     }
