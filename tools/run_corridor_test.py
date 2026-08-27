@@ -5,6 +5,8 @@ import argparse
 import csv
 from pathlib import Path
 
+import yaml
+
 from agt_map_reconstruction.io.pcd_loader import load_pcd
 from agt_map_reconstruction.maps.grid_map import build_traversability_map
 from agt_map_reconstruction.maps.row_direction import estimate_row_direction
@@ -21,15 +23,27 @@ def save_centerline_csv(centerline, path):
             writer.writerow([int(x), int(y)])
 
 
+def build_metadata_payload(maps, angle, direction, point_count, corridor):
+    return {
+        "experiment": "EXP002",
+        "grid": maps["metadata"].to_dict(),
+        "row_angle_rad": float(angle),
+        "row_direction": [float(v) for v in direction],
+        "points": int(point_count),
+        "corridor_cells": int(corridor.sum()),
+    }
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--pcd', required=True)
     parser.add_argument('--output', default='results/EXP002')
+    parser.add_argument('--resolution', type=float, default=0.05)
     args = parser.parse_args()
 
     points = load_pcd(args.pcd)
 
-    maps = build_traversability_map(points)
+    maps = build_traversability_map(points, resolution=args.resolution)
     height = maps['height']
     relative_height = maps['relative_height']
     traversability = maps['traversability']
@@ -52,12 +66,15 @@ def main():
     save_grid(centerline, out / 'centerline.png', 'centerline')
     save_centerline_csv(centerline, out / 'centerline.csv')
 
-    with open(out / 'metadata.yaml', 'w') as f:
-        f.write(f"experiment: EXP002\n")
-        f.write(f"row_angle_rad: {angle}\n")
-        f.write(f"row_direction: {direction.tolist()}\n")
-        f.write(f"points: {len(points)}\n")
-        f.write(f"corridor_cells: {int(corridor.sum())}\n")
+    metadata_payload = build_metadata_payload(
+        maps=maps,
+        angle=angle,
+        direction=direction,
+        point_count=len(points),
+        corridor=corridor,
+    )
+    with open(out / 'metadata.yaml', 'w', encoding='utf-8') as f:
+        yaml.safe_dump(metadata_payload, f, sort_keys=False)
 
     print('points:', len(points))
     print('row_angle:', angle)
