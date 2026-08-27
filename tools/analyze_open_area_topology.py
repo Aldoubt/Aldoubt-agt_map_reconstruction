@@ -15,8 +15,8 @@ import numpy as np
 def build_parser():
     parser = argparse.ArgumentParser(
         description=(
-            "Classify each row-core handoff as strictly connected, connected only "
-            "through unknown space, or disconnected from wide open-area candidates."
+            "Classify each row-core handoff by global connected-component reachability "
+            "to wide open-area candidates. This is not a side-local headland test."
         )
     )
     parser.add_argument("--map", required=True, help="navigation_base_map.pgm")
@@ -39,6 +39,7 @@ def _csv_row(item):
         "side": item.get("side"),
         "radius_m": item.get("radius_m"),
         "width_clearance_eligible": item.get("width_clearance_eligible"),
+        "connectivity_scope": "global_component",
         "connectivity_class": item.get("connectivity_class"),
         "strict_connected_candidates": ";".join(item.get("strict_connected_candidates", [])),
         "unknown_bridge_candidates": ";".join(item.get("unknown_bridge_candidates", [])),
@@ -90,6 +91,11 @@ def main():
         radius_m=float(radius),
     )
     result.update({
+        "connectivity_scope": "global_component",
+        "scope_note": (
+            "A connected handoff and candidate share one global traversable component. "
+            "This does not prove that the candidate lies beyond that specific entry/exit side."
+        ),
         "source_map": str(map_path),
         "source_row_band_regions": str(regions_path),
         "source_handoffs": str(handoffs_path),
@@ -107,6 +113,7 @@ def main():
         "side",
         "radius_m",
         "width_clearance_eligible",
+        "connectivity_scope",
         "connectivity_class",
         "strict_connected_candidates",
         "unknown_bridge_candidates",
@@ -122,6 +129,7 @@ def main():
 
     print("output:", output)
     print(f"radius: {float(radius):.2f}")
+    print("connectivity_scope: global_component")
     print("handoffs:", result["handoff_count"])
     print("open_area_candidates:", result["open_area_candidate_count"])
     print("connectivity_counts:", result["connectivity_counts"])
