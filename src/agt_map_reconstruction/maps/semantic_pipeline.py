@@ -1,0 +1,143 @@
+"""End-to-end PCD evidence reconstruction into semantic/Nav2 assets."""
+
+from __future__ import annotations
+
+from dataclasses import asdict
+import json
+from pathlib import Path
+
+import numpy as np
+
+from .grid_geometry import GridMetadata
+from .semantic_assets import write_semantic_navigation_assets
+from .semantic_reconstruction import corridor_seed_from_evidence
+
+
+def metadata_from_statistics(statistics):
+    """Convert robust raster statistics metadata into the common grid contract."""
+    height, width = np.asarray(statistics.low_height).shape
+    origin = np.asarray(statistics.origin_xy, dtype=float).reshape(-1)
+    if origin.size != 2:
+        raise ValueError("statistics origin_xy must contain exactly two values")
+    return GridMetadata(
+        resolution=float(statistics.resolution),
+        origin_x=float(origin[0]),
+        origin_y=float(origin[1]),
+        width=int(width),
+        height=int(height),
+    )
+
+
+def infer_row_direction_from_evidence(evidence, include_interpolated=True):
+    """Estimate a dominant row direction from confirmed/bridged ground support."""
+    seed = corridor_seed_from_evidence(
+        evidence, include_interpolated=include_interpolated
+    )
+    yy, xx = np.nonzero(seed)
+    if len(xx) < 2:
+        raise ValueError("cannot infer row direction from fewer than two supported cells")
+
+    points = np.column_stack((xx.astype(float), yy.astype(float)))
+    centered = points - points.mean(axis=0)
+    covariance = centered.T @ centered / len(points)
+    values, vectors = np.linalg.eigh(covariance)
+    direction = vectors[:, int(np.argmax(values))]
+    norm = float(np.linalg.norm(direction))
+    if norm <= 1e-12:
+        raise ValueError("cannot infer a non-zero row direction from evidence")
+    return direction / norm
+
+
+def build_semantic_assets_from_points(
+    points,
+    output_dir,
+    resolution=0.05,
+    chunk_size=1_000_000,
+    low_quantile=0.10,
+    histogram_bins=64,
+    ground_config=None,
+    row_direction=None,
+    min_longitudinal_support_ratio=0.50,
+    min_width_m=0.30,
+    min_length_m=2.0,
+    include_interpolated=True,
+    navigation_clearance_radii_m=(0.20, 0.25, 0.30, 0.35, 0.40, 0.50),
+):
+    """Build robust evidence, semantic geometry, and a Nav2 static-map bundle."""
+    from .elevation_statistics import points_to_elevation_statistics
+    from .ground_evidence import (
+        GroundEvidenceConfig,
+        build_ground_evidence_details,
+    )
+
+    statistics = points_to_elevation_statistics(
+        points,
+        resolution=resolution,
+        chunk_size=chunk_size,
+        low_quantile=low_quantile,
+        histogram_bins=histogram_bins,
+    )
+    if ground_config is None:
+        ground_config = GroundEvidenceConfig(resolution=float(resolution))
+    if abs(float(ground_config.resolution) - float(resolution)) > 1e-12:
+        raise ValueError("ground_config resolution must match raster resolution")
+
+    evidence_details = build_ground_evidence_details(
+        statistics.low_height,
+        statistics.point_count,
+        ground_config,
+        q90_height=statistics.q90_height,
+    )
+    metadata = metadata_from_statistics(statistics)
+    if row_direction is None:
+        direction = infer_row_direction_from_evidence(
+            evidence_details.evidence,
+            include_interpolated=include_interpolated,
+        )
+        row_direction_source = "evidence_pca"
+    else:
+        direction = np.asarray(row_direction, dtype=float)
+        row_direction_source = "explicit"
+
+    output = Path(output_dir)
+    output.mkdir(parents=True, exist_ok=True)
+    np.save(output / "low_height.npy", statistics.low_height)
+    np.save(output / "q90_height.npy", statistics.q90_height)
+    np.save(output / "point_count.npy", statistics.point_count)
+    np.save(output / "ground_surface.npy", evidence_details.ground_surface)
+    np.save(output / "clearance.npy", evidence_details.clearance)
+
+    bundle = write_semantic_navigation_assets(
+        evidence=evidence_details.evidence,
+        metadata=metadata,
+        row_direction=direction,
+        output_dir=output,
+        min_longitudinal_support_ratio=min_longitudinal_support_ratio,
+        min_width_m=min_width_m,
+        min_length_m=min_length_m,
+        include_interpolated=include_interpolated,
+        navigation_clearance_radii_m=navigation_clearance_radii_m,
+    )
+    pipeline_manifest = {
+        "schema_version": 1,
+        "grid": metadata.to_dict(),
+        "rasterization": {
+            "chunk_size": int(chunk_size),
+            "low_quantile": float(low_quantile),
+            "histogram_bins": int(histogram_bins),
+        },
+        "ground_evidence_config": asdict(ground_config),
+        "row_direction_source": row_direction_source,
+        "row_direction": bundle["manifest"]["row_direction"],
+    }
+    (output / "pipeline_manifest.json").write_text(
+        json.dumps(pipeline_manifest, indent=2, sort_keys=False) + "\n",
+        encoding="utf-8",
+    )
+    return {
+        "statistics": statistics,
+        "evidence_details": evidence_details,
+        "metadata": metadata,
+        "bundle": bundle,
+        "pipeline_manifest": pipeline_manifest,
+    }
