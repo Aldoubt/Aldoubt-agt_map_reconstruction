@@ -10,6 +10,10 @@ are preserved:
   q90-low reference extent (useful for vegetation/vertical row structure while
   rejecting canopy/roof extent that is similarly large everywhere).
 
+A short sustained patch proves local 3D structure, but it does not by itself
+support both endpoints of a full ridge. Endpoint-eligible 3D evidence therefore
+also requires an explicit minimum longitudinal structural span fraction.
+
 Neither cue promotes navigation free space or semantic labels.
 """
 
@@ -84,6 +88,7 @@ def _audit_profile(
     min_support_fraction,
     min_persistence_m,
     max_internal_gap_m,
+    min_structural_span_fraction,
     all_u,
     all_v,
 ):
@@ -172,17 +177,41 @@ def _audit_profile(
         min_persistence_m=float(min_persistence_m),
         max_internal_gap_m=float(max_internal_gap_m),
     )
-    ok = detected["status"] == "ok"
+
+    profile_span_m = max(0.0, float(edges[-1] - edges[0]) * resolution)
+    structural_span_m = None
+    structural_span_fraction = None
+    if detected.get("entry_u_cells") is not None and detected.get("exit_u_cells") is not None:
+        structural_span_m = max(
+            0.0,
+            float(detected["exit_u_cells"] - detected["entry_u_cells"]) * resolution,
+        )
+        if profile_span_m > 1e-12:
+            structural_span_fraction = structural_span_m / profile_span_m
+
+    if detected["status"] != "ok":
+        status = "insufficient_3d_structural_support"
+    elif structural_span_fraction is None or (
+        structural_span_fraction + 1e-12 < float(min_structural_span_fraction)
+    ):
+        status = "insufficient_longitudinal_structural_span"
+    else:
+        status = "ok_3d_structural_support"
+
     supported_bins = int(np.count_nonzero(np.asarray(support_fraction) + 1e-12 >= float(min_support_fraction)))
     return {
         "ridge_id": str(profile["ridge_id"]),
         "left_aisle_label": str(profile["left_aisle_label"]),
         "right_aisle_label": str(profile["right_aisle_label"]),
-        "status": "ok_3d_structural_support" if ok else "insufficient_3d_structural_support",
+        "status": status,
+        "detector_status": detected["status"],
         "entry_grid_xy": detected.get("entry_grid_xy"),
         "exit_grid_xy": detected.get("exit_grid_xy"),
         "entry_u_cells": detected.get("entry_u_cells"),
         "exit_u_cells": detected.get("exit_u_cells"),
+        "profile_span_m": profile_span_m,
+        "structural_span_m": structural_span_m,
+        "structural_span_fraction": structural_span_fraction,
         "bin_support_fraction": support_fraction,
         "bin_valid_cell_count": valid_cells,
         "bin_topographic_supported_cell_count": topographic_count,
@@ -194,6 +223,7 @@ def _audit_profile(
         "bin_vertical_extent_contrast_median": vertical_extent_contrast_median,
         "evidence_summary": {
             "supported_bin_count": supported_bins,
+            "supported_bin_fraction": 0.0 if support_fraction == [] else supported_bins / len(support_fraction),
             "topographic_supported_bin_count": int(np.count_nonzero(np.asarray(topographic_count) > 0)),
             "vertical_supported_bin_count": int(np.count_nonzero(np.asarray(vertical_count) > 0)),
             "valid_cell_count": int(np.sum(valid_cells)),
@@ -214,11 +244,15 @@ def audit_inferred_lattice_3d_structure(
     min_support_fraction=0.40,
     min_persistence_m=1.00,
     max_internal_gap_m=0.20,
+    min_structural_span_fraction=0.50,
 ):
     """Audit only unsupported ridge bands adjacent to inferred lattice slots.
 
     ``min_vertical_extent_m`` is the required ridge-minus-aisle vertical extent
     contrast, retained under the existing argument name for CLI compatibility.
+    ``min_structural_span_fraction`` is an endpoint-quality gate: local 3D
+    structure can still be recorded when it fails, but it is not eligible to
+    define both ridge endpoints.
     """
     low, q90, count = _validate_grids(low_height, q90_height, point_count)
     bundle = dict(structural_bundle)
@@ -233,6 +267,8 @@ def audit_inferred_lattice_3d_structure(
         raise ValueError("min_points_per_cell must be >= 1")
     if float(aisle_reference_half_width_m) <= 0.0:
         raise ValueError("aisle_reference_half_width_m must be > 0")
+    if not 0.0 < float(min_structural_span_fraction) <= 1.0:
+        raise ValueError("min_structural_span_fraction must be in (0,1]")
 
     rows_by_label = {str(item["label"]): item for item in bundle.get("lattice_rows") or []}
     profiles_by_id = {str(item["ridge_id"]): item for item in bundle.get("ridge_profiles") or []}
@@ -264,6 +300,7 @@ def audit_inferred_lattice_3d_structure(
                 min_support_fraction=float(min_support_fraction),
                 min_persistence_m=float(min_persistence_m),
                 max_internal_gap_m=float(max_internal_gap_m),
+                min_structural_span_fraction=float(min_structural_span_fraction),
                 all_u=all_u,
                 all_v=all_v,
             )
@@ -271,7 +308,7 @@ def audit_inferred_lattice_3d_structure(
 
     supported = sum(1 for item in audits if item["status"] == "ok_3d_structural_support")
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "method": "targeted_inferred_lattice_3d_structural_contrast_audit",
         "grid_shape_yx": list(low.shape),
         "resolution_m": resolution,
@@ -288,6 +325,7 @@ def audit_inferred_lattice_3d_structure(
             "min_support_fraction": float(min_support_fraction),
             "min_persistence_m": float(min_persistence_m),
             "max_internal_gap_m": float(max_internal_gap_m),
+            "min_structural_span_fraction": float(min_structural_span_fraction),
         },
         "policy": {
             "target_selection": "unsupported_ridge_adjacent_to_inferred_lattice_slot",
@@ -295,6 +333,7 @@ def audit_inferred_lattice_3d_structure(
             "topographic_cue_is_aisle_relative": True,
             "vertical_extent_cue_is_aisle_relative": True,
             "uniform_vertical_extent_rejected": True,
+            "local_3d_structure_does_not_imply_full_ridge_endpoint_support": True,
             "automatic_parameter_selection": False,
             "automatic_acceptance": False,
             "navigation_map_modified": False,
