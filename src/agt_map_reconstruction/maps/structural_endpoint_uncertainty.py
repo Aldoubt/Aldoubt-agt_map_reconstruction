@@ -1,7 +1,7 @@
 """Uncertainty-preserving structural endpoint envelope for P1-D3.1 v3.
 
 Unlike the earlier bilateral gate, this module keeps every ridge termination
-that has direct structural evidence.  Aisle-level left/right disagreement is
+that has direct structural evidence. Aisle-level left/right disagreement is
 reported as uncertainty metadata instead of deleting the underlying ridge
 observations.
 """
@@ -48,10 +48,25 @@ def _quantiles(values):
     }
 
 
-def _side_payload(ridge_terminations, side, axis, cross, resolution_m):
+def _profile_cross_centers(ridge_profiles):
+    centers = {}
+    for profile in ridge_profiles:
+        ridge_id = str(profile.get("ridge_id", ""))
+        span = profile.get("ridge_cross_span_cells")
+        if not ridge_id or span is None:
+            continue
+        values = np.asarray(span, dtype=np.float64)
+        if values.shape != (2,):
+            continue
+        centers[ridge_id] = float(np.mean(values))
+    return centers
+
+
+def _side_payload(ridge_terminations, ridge_profiles, side, axis, cross, resolution_m):
     points = []
     ridge_points = []
     unsupported = []
+    supported_ids = []
     for ridge in ridge_terminations:
         ridge_id = str(ridge.get("ridge_id", ""))
         if ridge.get("status") != "ok":
@@ -66,6 +81,7 @@ def _side_payload(ridge_terminations, side, axis, cross, resolution_m):
         if xy.shape != (2,):
             raise ValueError(f"{ridge_id} {side}_grid_xy must contain two values")
         points.append(xy)
+        supported_ids.append(ridge_id)
         ridge_points.append(
             {
                 "ridge_id": ridge_id,
@@ -76,6 +92,10 @@ def _side_payload(ridge_terminations, side, axis, cross, resolution_m):
                 "abs_residual_m": None,
             }
         )
+
+    profile_centers = _profile_cross_centers(ridge_profiles)
+    total_cross = [profile_centers[rid] for rid in profile_centers]
+    supported_cross = [profile_centers[rid] for rid in supported_ids if rid in profile_centers]
 
     if not points:
         return {
@@ -100,23 +120,15 @@ def _side_payload(ridge_terminations, side, axis, cross, resolution_m):
         record["residual_m"] = float(residual)
         record["abs_residual_m"] = float(abs(residual))
 
-    if v.size >= 2:
-        supported_span = float(np.ptp(v))
+    if len(supported_cross) >= 2:
+        supported_span = float(np.ptp(np.asarray(supported_cross, dtype=np.float64)))
     else:
         supported_span = 0.0
-
-    all_cross = []
-    for ridge in ridge_terminations:
-        for candidate_side in ("entry", "exit"):
-            point = ridge.get(f"{candidate_side}_grid_xy")
-            if point is None:
-                continue
-            xy = np.asarray(point, dtype=np.float64)
-            if xy.shape == (2,):
-                all_cross.append(float(xy @ cross))
-                break
-    total_span = float(np.ptp(np.asarray(all_cross, dtype=np.float64))) if len(all_cross) >= 2 else 0.0
-    span_fraction = 1.0 if total_span <= 1e-12 and v.size > 0 else (
+    if len(total_cross) >= 2:
+        total_span = float(np.ptp(np.asarray(total_cross, dtype=np.float64)))
+    else:
+        total_span = 0.0
+    span_fraction = 1.0 if total_span <= 1e-12 and supported_ids else (
         0.0 if total_span <= 1e-12 else min(1.0, supported_span / total_span)
     )
 
@@ -174,6 +186,7 @@ def build_structural_endpoint_uncertainty_envelope(structural_bundle):
     """Build a structural endpoint trend plus explicit uncertainty metadata."""
     bundle = dict(structural_bundle)
     ridges = list(bundle.get("ridge_terminations") or [])
+    ridge_profiles = list(bundle.get("ridge_profiles") or [])
     axis = _unit(bundle.get("row_axis_direction"))
     cross = _unit(bundle.get("cross_row_direction"))
     if abs(float(axis @ cross)) > 1e-6:
@@ -192,8 +205,8 @@ def build_structural_endpoint_uncertainty_envelope(structural_bundle):
         "ridge_count": len(ridges),
         "supported_ridge_count": supported,
         "unsupported_ridge_count": len(ridges) - supported,
-        "entry": _side_payload(ridges, "entry", axis, cross, resolution),
-        "exit": _side_payload(ridges, "exit", axis, cross, resolution),
+        "entry": _side_payload(ridges, ridge_profiles, "entry", axis, cross, resolution),
+        "exit": _side_payload(ridges, ridge_profiles, "exit", axis, cross, resolution),
         "aisle_endpoint_uncertainty": _aisle_uncertainty(bundle.get("paired_endpoints") or []),
         "policy": {
             "ridge_outliers_deleted": False,
