@@ -10,6 +10,7 @@ from agt_map_reconstruction.maps.aisle_reconstruction import (
 from agt_map_reconstruction.maps.grid_geometry import GridMetadata
 from agt_map_reconstruction.maps.ground_evidence import EvidenceClass
 from agt_map_reconstruction.maps.navigation_export import (
+    FREE_VALUE,
     OCCUPIED_VALUE,
     build_navigation_layers,
 )
@@ -160,10 +161,12 @@ def test_semantic_navigation_bundle_writes_current_exp003_inputs(tmp_path):
     assert (tmp_path / "navigation" / "validation.json").exists()
 
     labels = np.load(tmp_path / "semantic_labels.npy")
-    assert labels[4, 30] == LABEL_OCCUPIED_CONFIRMED
-    assert result["navigation"]["layers"].base_map[4, 30] == OCCUPIED_VALUE
+    assert labels[4, 30] == LABEL_OBSTACLE_CANDIDATE
+    assert result["navigation"]["layers"].base_map[4, 30] == FREE_VALUE
+    assert bool(result["navigation"]["layers"].candidate_mask[4, 30]) is True
     assert result["manifest"]["aisle_count"] == 2
     assert result["manifest"]["evidence_counts"]["occupied_confirmed"] == 1
+    assert result["manifest"]["aisle_conflict_candidate_count"] == 1
 
 
 def test_legacy_exp002_fallback_stays_advisory_not_hard():

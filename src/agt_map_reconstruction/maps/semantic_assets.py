@@ -9,11 +9,13 @@ import numpy as np
 
 from .aisle_reconstruction import recover_aisle_rectangles, write_aisle_bundle
 from .ground_evidence import EvidenceClass
-from .navigation_export import write_navigation_bundle
+from .navigation_export import rasterize_aisles, write_navigation_bundle
 from .semantic_reconstruction import (
     LABEL_AISLE,
+    LABEL_OBSTACLE_CANDIDATE,
     LABEL_OCCUPIED_CONFIRMED,
     corridor_seed_from_evidence,
+    refine_occupied_evidence_with_aisle_prior,
     semantic_labels_from_evidence,
 )
 
@@ -39,12 +41,14 @@ def write_semantic_navigation_assets(
     include_interpolated=True,
     navigation_clearance_radii_m=(0.20, 0.25, 0.30, 0.35, 0.40, 0.50),
 ):
-    """Write current EXP003 inputs plus a conservative Nav2 static-map bundle.
+    """Write evidence-derived semantics plus a conservative Nav2 bundle.
 
-    Confirmed occupied evidence is retained as a hard semantic label even when
-    the recovered aisle geometry overlaps it. Interpolated ground may support
-    aisle geometry recovery, but the evidence-derived Nav2 map does not let the
-    aisle prior promote unknown/interpolated cells to static free.
+    Four-state evidence remains authoritative and is persisted unchanged.
+    Recovered aisle geometry may reinterpret only confirmed occupied evidence
+    that conflicts with a longitudinal aisle as an advisory obstacle candidate.
+    Unknown/interpolated cells are never promoted. Confirmed occupied evidence
+    outside aisle geometry remains hard, and candidate conflicts stay visible in
+    ``candidate_mask.npy`` even when the static base map uses the aisle prior.
     """
     evidence = np.asarray(evidence, dtype=np.uint8)
     expected_shape = (int(metadata.height), int(metadata.width))
@@ -57,7 +61,7 @@ def write_semantic_navigation_assets(
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
 
-    labels = semantic_labels_from_evidence(evidence)
+    raw_labels = semantic_labels_from_evidence(evidence)
     seed = corridor_seed_from_evidence(
         evidence, include_interpolated=include_interpolated
     )
@@ -68,6 +72,12 @@ def write_semantic_navigation_assets(
         min_longitudinal_support_ratio=min_longitudinal_support_ratio,
         min_width_m=min_width_m,
         min_length_m=min_length_m,
+    )
+    aisle_prior = rasterize_aisles(aisles, evidence.shape)
+    labels = refine_occupied_evidence_with_aisle_prior(raw_labels, aisle_prior)
+    aisle_conflict_candidates = (
+        (raw_labels == LABEL_OCCUPIED_CONFIRMED)
+        & (labels == LABEL_OBSTACLE_CANDIDATE)
     )
 
     np.save(output / "evidence.npy", evidence)
@@ -102,15 +112,21 @@ def write_semantic_navigation_assets(
             "min_width_m": float(min_width_m),
             "min_length_m": float(min_length_m),
             "promote_aisle_prior_to_static_free": False,
+            "occupied_aisle_conflict_policy": "obstacle_candidate",
+            "promote_candidates_in_aisles_to_static_free": True,
         },
         "evidence_counts": evidence_counts,
         "label_counts": {
             "free_confirmed": int(np.count_nonzero(labels == LABEL_AISLE)),
+            "obstacle_candidate": int(
+                np.count_nonzero(labels == LABEL_OBSTACLE_CANDIDATE)
+            ),
             "occupied_confirmed": int(
                 np.count_nonzero(labels == LABEL_OCCUPIED_CONFIRMED)
             ),
             "unknown_or_interpolated": int(np.count_nonzero(labels == 0)),
         },
+        "aisle_conflict_candidate_count": int(aisle_conflict_candidates.sum()),
     }
     (output / "semantic_manifest.json").write_text(
         json.dumps(manifest, indent=2, sort_keys=False) + "\n",
@@ -125,6 +141,7 @@ def write_semantic_navigation_assets(
         origin=(metadata.origin_x, metadata.origin_y, metadata.origin_yaw),
         clearance_radii_m=navigation_clearance_radii_m,
         promote_aisle_prior=False,
+        promote_candidates_in_aisles=True,
     )
     return {
         "semantic_labels": labels,

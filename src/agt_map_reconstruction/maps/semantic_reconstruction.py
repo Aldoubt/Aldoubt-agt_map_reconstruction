@@ -27,16 +27,38 @@ def _as_evidence(evidence):
 def semantic_labels_from_evidence(evidence):
     """Convert four-state ground evidence to EXP003 navigation semantics.
 
-    Confirmed free becomes semantic free. Confirmed occupied receives its own
-    hard label instead of being misnamed as ridge/wall/pillar. Interpolated
-    ground stays unknown in the static semantic grid and is only available to
-    corridor-geometry recovery as an optional continuity hint.
+    Confirmed free becomes semantic free. Confirmed occupied initially receives
+    its own hard evidence label instead of being misnamed as ridge/wall/pillar.
+    Interpolated ground stays unknown in the static semantic grid and is only
+    available to corridor-geometry recovery as an optional continuity hint.
     """
     evidence = _as_evidence(evidence)
     labels = np.full(evidence.shape, LABEL_UNKNOWN, dtype=np.uint8)
     labels[evidence == EvidenceClass.FREE_CONFIRMED] = LABEL_AISLE
     labels[evidence == EvidenceClass.OCCUPIED_CONFIRMED] = LABEL_OCCUPIED_CONFIRMED
     return labels
+
+
+def refine_occupied_evidence_with_aisle_prior(semantic_labels, aisle_prior):
+    """Demote measured occupied/aisle conflicts to advisory candidates.
+
+    The recovered aisle prior is allowed to reinterpret only measured
+    ``LABEL_OCCUPIED_CONFIRMED`` cells. Unknown and interpolated cells are not
+    promoted, and confirmed occupied evidence outside recovered aisles remains
+    hard. This separates low-level elevated returns from persistent structural
+    semantics without erasing the original evidence or candidate mask.
+    """
+    semantic = np.asarray(semantic_labels)
+    aisle = np.asarray(aisle_prior, dtype=bool)
+    if semantic.ndim != 2 or aisle.ndim != 2:
+        raise ValueError("semantic_labels and aisle_prior must be 2D arrays")
+    if semantic.shape != aisle.shape:
+        raise ValueError("semantic_labels and aisle_prior shape must match")
+
+    refined = semantic.astype(np.uint8, copy=True)
+    conflict = aisle & (semantic == LABEL_OCCUPIED_CONFIRMED)
+    refined[conflict] = LABEL_OBSTACLE_CANDIDATE
+    return refined
 
 
 def corridor_seed_from_evidence(evidence, include_interpolated=True):

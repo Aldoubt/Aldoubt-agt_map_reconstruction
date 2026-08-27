@@ -39,7 +39,12 @@ def rasterize_aisles(rectangles, shape):
     return mask.astype(bool)
 
 
-def build_navigation_layers(semantic_labels, aisle_rectangles, promote_aisle_prior=True):
+def build_navigation_layers(
+    semantic_labels,
+    aisle_rectangles,
+    promote_aisle_prior=True,
+    promote_candidates_in_aisles=False,
+):
     semantic = np.asarray(semantic_labels)
     if semantic.ndim != 2:
         raise ValueError('semantic_labels must be a 2D array')
@@ -50,11 +55,12 @@ def build_navigation_layers(semantic_labels, aisle_rectangles, promote_aisle_pri
     free = semantic == 1
     if promote_aisle_prior:
         free |= aisle_prior
+    if promote_candidates_in_aisles:
+        free |= candidate & aisle_prior
 
     base = np.full(semantic.shape, UNKNOWN_VALUE, dtype=np.uint8)
     base[free] = FREE_VALUE
-    # Structural geometry and confirmed occupied evidence have the highest
-    # priority and must never be promoted to free by the aisle prior.
+    # Explicit structural/hard labels always override any prior promotion.
     base[hard] = OCCUPIED_VALUE
 
     return NavigationLayers(
@@ -163,7 +169,8 @@ def write_pgm(grid, path):
 def write_navigation_bundle(semantic_labels, aisle_rectangles, output_dir,
                             resolution=0.05, origin=(0.0, 0.0, 0.0),
                             clearance_radii_m=(0.20, 0.25, 0.30, 0.35, 0.40, 0.50),
-                            promote_aisle_prior=True):
+                            promote_aisle_prior=True,
+                            promote_candidates_in_aisles=False):
     """Build and persist the navigation-map-v2 artifact bundle."""
     import json
     from pathlib import Path
@@ -177,6 +184,7 @@ def write_navigation_bundle(semantic_labels, aisle_rectangles, output_dir,
         semantic_labels,
         aisle_rectangles,
         promote_aisle_prior=promote_aisle_prior,
+        promote_candidates_in_aisles=promote_candidates_in_aisles,
     )
     map_yaml = build_map_yaml('navigation_base_map.pgm', resolution, origin)
     validation = validate_navigation_map(
@@ -185,12 +193,18 @@ def write_navigation_bundle(semantic_labels, aisle_rectangles, output_dir,
         resolution,
         clearance_radii_m=clearance_radii_m,
     )
+    promoted_candidates = (
+        layers.candidate_mask
+        & layers.aisle_prior
+        & (layers.base_map == FREE_VALUE)
+    )
     validation.update({
         'map_server_yaml_valid': bool(
             map_yaml['mode'] == 'trinary'
             and 0.0 <= map_yaml['free_thresh'] < map_yaml['occupied_thresh'] <= 1.0
         ),
         'candidate_cell_count': int(layers.candidate_mask.sum()),
+        'candidate_promoted_to_free_cell_count': int(promoted_candidates.sum()),
         'hard_obstacle_cell_count': int(layers.hard_obstacle_mask.sum()),
         'hard_obstacle_as_free_cell_count': int(
             np.count_nonzero(layers.hard_obstacle_mask & (layers.base_map == FREE_VALUE))
