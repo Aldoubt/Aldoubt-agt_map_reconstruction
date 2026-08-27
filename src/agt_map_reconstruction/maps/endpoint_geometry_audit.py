@@ -65,6 +65,19 @@ def _summary(values):
     }
 
 
+def _side_provenance(handoff, source_side):
+    boundary = handoff.get(f"{source_side}_handoff") or {}
+    transition = handoff.get(f"{source_side}_transition") or {}
+    return {
+        "boundary_nearest_source": boundary.get(
+            "boundary_nearest_source", boundary.get("boundary_source")
+        ),
+        "transition_length_m": handoff.get(f"{source_side}_transition_length_m"),
+        "transition_dominant_source": transition.get("dominant_source"),
+        "transition_blocked_cell_count": transition.get("blocked_cell_count"),
+    }
+
+
 def audit_endpoint_geometry(rows, handoffs, *, resolution_m):
     """Compare raw centerline endpoints and real clearance-conditioned handoffs.
 
@@ -115,6 +128,10 @@ def audit_endpoint_geometry(rows, handoffs, *, resolution_m):
         named_exit = np.asarray(handoff["exit_handoff"]["grid_xy"], dtype=np.float64)
         common_entry = named_entry.copy() if forward else named_exit.copy()
         common_exit = named_exit.copy() if forward else named_entry.copy()
+        entry_source_side = "entry" if forward else "exit"
+        exit_source_side = "exit" if forward else "entry"
+        entry_provenance = _side_provenance(handoff, entry_source_side)
+        exit_provenance = _side_provenance(handoff, exit_source_side)
 
         entry_inward_m = float((common_entry - raw_entry) @ row_axis) * float(resolution_m)
         exit_inward_m = float((raw_exit - common_exit) @ row_axis) * float(resolution_m)
@@ -125,6 +142,7 @@ def audit_endpoint_geometry(rows, handoffs, *, resolution_m):
             {
                 "label": label,
                 "source_centerline_forward": bool(forward),
+                "component_selection": handoff.get("component_selection"),
                 "raw_entry_grid_xy": raw_entry.tolist(),
                 "raw_exit_grid_xy": raw_exit.tolist(),
                 "handoff_entry_grid_xy": common_entry.tolist(),
@@ -133,8 +151,24 @@ def audit_endpoint_geometry(rows, handoffs, *, resolution_m):
                 "exit_inward_offset_m": exit_inward_m,
                 "entry_euclidean_offset_m": entry_euclid_m,
                 "exit_euclidean_offset_m": exit_euclid_m,
-                "entry_handoff_clearance_m": handoff["entry_handoff"].get("clearance_m"),
-                "exit_handoff_clearance_m": handoff["exit_handoff"].get("clearance_m"),
+                "entry_handoff_clearance_m": handoff[f"{entry_source_side}_handoff"].get("clearance_m"),
+                "exit_handoff_clearance_m": handoff[f"{exit_source_side}_handoff"].get("clearance_m"),
+                "entry_boundary_nearest_source": entry_provenance["boundary_nearest_source"],
+                "exit_boundary_nearest_source": exit_provenance["boundary_nearest_source"],
+                "entry_transition_length_m": entry_provenance["transition_length_m"],
+                "exit_transition_length_m": exit_provenance["transition_length_m"],
+                "entry_transition_dominant_source": entry_provenance[
+                    "transition_dominant_source"
+                ],
+                "exit_transition_dominant_source": exit_provenance[
+                    "transition_dominant_source"
+                ],
+                "entry_transition_blocked_cell_count": entry_provenance[
+                    "transition_blocked_cell_count"
+                ],
+                "exit_transition_blocked_cell_count": exit_provenance[
+                    "transition_blocked_cell_count"
+                ],
                 "row_core_fraction": handoff.get("row_core_fraction"),
             }
         )
