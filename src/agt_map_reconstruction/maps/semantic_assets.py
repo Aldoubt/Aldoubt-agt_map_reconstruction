@@ -10,6 +10,10 @@ import numpy as np
 from .aisle_reconstruction import recover_aisle_rectangles, write_aisle_bundle
 from .ground_evidence import EvidenceClass
 from .navigation_export import rasterize_aisles, write_navigation_bundle
+from .row_band_classification import (
+    classify_row_bands,
+    write_row_band_classification_bundle,
+)
 from .semantic_reconstruction import (
     LABEL_AISLE,
     LABEL_OBSTACLE_CANDIDATE,
@@ -42,19 +46,21 @@ def write_semantic_navigation_assets(
     min_length_m=2.0,
     include_interpolated=True,
     occupied_aisle_conflict_policy="hard",
+    wide_band_iqr_factor=1.50,
     navigation_clearance_radii_m=(0.20, 0.25, 0.30, 0.35, 0.40, 0.50),
 ):
     """Write evidence-derived semantics plus a Nav2 static-map bundle.
 
-    ``hard`` is the conservative default: every ``OCCUPIED_CONFIRMED`` cell
-    remains a static hard obstacle. ``candidate`` is an explicit diagnostic /
-    semantic-prior experiment: only occupied evidence overlapping a recovered
-    aisle is reclassified as an advisory obstacle candidate. Candidate cells
-    inside that aisle may then be represented as free in the static base map,
-    while staying present in ``candidate_mask.npy``.
+    Recovered row-aligned bands are first separated into ordinary ``row_aisle``
+    regions and unusually wide ``wide_open_area_candidate`` regions using an
+    upper-width IQR outlier rule. Width alone is intentionally not treated as
+    proof of a headland; open-area candidates stay as a geometry-level class
+    for later endpoint/topology validation.
 
-    Unknown/interpolated evidence is never promoted by either policy, and
-    confirmed occupied evidence outside recovered aisles remains hard.
+    ``hard`` is the conservative obstacle default. ``candidate`` relaxes only
+    confirmed occupied evidence that overlaps an accepted row aisle. Occupied
+    evidence inside a wide open-area candidate is not relaxed by this policy.
+    Unknown/interpolated evidence is never promoted by either policy.
     """
     if occupied_aisle_conflict_policy not in AISLE_CONFLICT_POLICIES:
         raise ValueError(
@@ -77,7 +83,7 @@ def write_semantic_navigation_assets(
     seed = corridor_seed_from_evidence(
         evidence, include_interpolated=include_interpolated
     )
-    aisles = recover_aisle_rectangles(
+    raw_row_bands = recover_aisle_rectangles(
         seed,
         direction,
         float(metadata.resolution),
@@ -85,6 +91,11 @@ def write_semantic_navigation_assets(
         min_width_m=min_width_m,
         min_length_m=min_length_m,
     )
+    row_band_classification = classify_row_bands(
+        raw_row_bands,
+        iqr_factor=wide_band_iqr_factor,
+    )
+    aisles = row_band_classification.row_aisles
     aisle_prior = rasterize_aisles(aisles, evidence.shape)
 
     if occupied_aisle_conflict_policy == "candidate":
@@ -105,6 +116,11 @@ def write_semantic_navigation_assets(
     aisle_payload = write_aisle_bundle(
         aisles, metadata, output / "aisle_rectangles.json"
     )
+    row_band_payload = write_row_band_classification_bundle(
+        row_band_classification,
+        metadata,
+        output / "row_band_regions.json",
+    )
 
     evidence_counts = {
         "unknown": int(np.count_nonzero(evidence == EvidenceClass.UNKNOWN)),
@@ -122,7 +138,11 @@ def write_semantic_navigation_assets(
         "schema_version": 1,
         "grid": metadata.to_dict(),
         "row_direction": [float(v) for v in direction],
+        "raw_row_band_count": len(raw_row_bands),
         "aisle_count": len(aisles),
+        "open_area_candidate_count": len(
+            row_band_classification.open_area_candidates
+        ),
         "geometry_policy": {
             "include_interpolated": bool(include_interpolated),
             "min_longitudinal_support_ratio": float(
@@ -130,6 +150,13 @@ def write_semantic_navigation_assets(
             ),
             "min_width_m": float(min_width_m),
             "min_length_m": float(min_length_m),
+            "wide_band_classification": "upper_width_outlier_q3_plus_iqr",
+            "wide_band_iqr_factor": float(wide_band_iqr_factor),
+            "wide_band_width_threshold_m": (
+                None
+                if row_band_classification.width_outlier_threshold_m is None
+                else float(row_band_classification.width_outlier_threshold_m)
+            ),
             "promote_aisle_prior_to_static_free": False,
             "occupied_aisle_conflict_policy": occupied_aisle_conflict_policy,
             "promote_candidates_in_aisles_to_static_free": bool(
@@ -168,6 +195,8 @@ def write_semantic_navigation_assets(
         "semantic_labels": labels,
         "corridor_seed": seed,
         "aisle_payload": aisle_payload,
+        "row_band_payload": row_band_payload,
+        "row_band_classification": row_band_classification,
         "manifest": manifest,
         "navigation": navigation,
     }
