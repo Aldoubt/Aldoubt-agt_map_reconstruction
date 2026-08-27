@@ -39,6 +39,16 @@ def build_parser():
     parser.add_argument("--min-support-fraction", type=float, default=0.40)
     parser.add_argument("--min-persistence-m", type=float, default=1.00)
     parser.add_argument("--max-internal-gap-m", type=float, default=0.20)
+    parser.add_argument(
+        "--min-structural-span-fraction",
+        type=float,
+        default=0.50,
+        help=(
+            "minimum fraction of the ridge longitudinal profile spanned between "
+            "the detected entry/exit structural terminations; diagnostic quality "
+            "gate, not automatic parameter selection"
+        ),
+    )
     return parser
 
 
@@ -116,6 +126,7 @@ def main():
         min_support_fraction=float(args.min_support_fraction),
         min_persistence_m=float(args.min_persistence_m),
         max_internal_gap_m=float(args.max_internal_gap_m),
+        min_structural_span_fraction=float(args.min_structural_span_fraction),
     )
     result["sources"] = {
         "structural_bundle": str(source_path),
@@ -134,7 +145,12 @@ def main():
         centers = np.asarray(profile.get("bin_center_grid_xy"), dtype=np.float64)
         if centers.ndim != 2 or centers.shape[0] < 2:
             continue
-        color = (0, 200, 0) if audit["status"] == "ok_3d_structural_support" else (0, 0, 255)
+        if audit["status"] == "ok_3d_structural_support":
+            color = (0, 200, 0)
+        elif audit["status"] == "insufficient_longitudinal_structural_span":
+            color = (0, 165, 255)
+        else:
+            color = (0, 0, 255)
         cv2.polylines(
             image,
             [np.rint(centers).astype(np.int32)],
@@ -151,10 +167,11 @@ def main():
             cv2.circle(image, (x, y), 5, color, -1, lineType=cv2.LINE_AA)
 
     display = np.flipud(image).copy()
-    cv2.rectangle(display, (8, 8), (640, 92), (30, 30, 30), -1)
+    cv2.rectangle(display, (8, 8), (700, 116), (30, 30, 30), -1)
     legend = [
-        ("green: inferred-adjacent ridge with sustained aisle-relative 3D structure", (0, 200, 0)),
-        ("red: inferred-adjacent ridge still lacks sustained aisle-relative 3D structure", (0, 0, 255)),
+        ("green: inferred-adjacent ridge with endpoint-eligible aisle-relative 3D support", (0, 200, 0)),
+        ("orange: local 3D structure exists but longitudinal span is insufficient", (0, 165, 255)),
+        ("red: inferred-adjacent ridge lacks sustained aisle-relative 3D structure", (0, 0, 255)),
         ("lattice geometry selects targets only; it never supplies 3D evidence", (255, 220, 0)),
     ]
     for index, (text, color) in enumerate(legend):
@@ -177,14 +194,19 @@ def main():
     print("unsupported_target_ridges:", result["unsupported_target_ridge_count"])
     for item in result["ridge_audits"]:
         summary = item["evidence_summary"]
+        span = item.get("structural_span_fraction")
+        span_text = "none" if span is None else f"{span:.6f}"
         print(
             f"{item['ridge_id']}: status={item['status']} "
             f"supported_bins={summary['supported_bin_count']} "
+            f"supported_bin_fraction={summary['supported_bin_fraction']:.6f} "
+            f"structural_span_fraction={span_text} "
             f"topographic_bins={summary['topographic_supported_bin_count']} "
             f"vertical_contrast_bins={summary['vertical_supported_bin_count']} "
             f"valid_cells={summary['valid_cell_count']}"
         )
     print("vertical_extent_cue_is_aisle_relative: true")
+    print("local_3d_structure_does_not_imply_full_ridge_endpoint_support: true")
     print("inferred_slot_supplies_3d_evidence: false")
     print("automatic_parameter_selection: false")
     print("automatic_acceptance: false")
