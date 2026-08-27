@@ -1,8 +1,10 @@
 """Stream Livox CustomMsg observations directly into ground-aware grid support.
 
 Unlike the NPZ exporter used for QA, this adapter keeps only bounded ray batches
-in memory and accumulates a global support-count grid. It never writes a full
-ray bundle and never modifies semantic or navigation-map cells.
+in memory and accumulates global support-count grids. It preserves the physical
+scan index so downstream evidence can distinguish raw ray density from unique
+scan support. It never writes a full ray bundle and never modifies semantic or
+navigation-map cells.
 """
 
 from __future__ import annotations
@@ -39,7 +41,7 @@ def stream_livox_ground_aware_evidence(
     max_rays=None,
     batch_ray_limit=250000,
 ):
-    """Accumulate map-frame ray support without materializing a full ray NPZ."""
+    """Accumulate map-frame ray and unique-scan support without a full ray NPZ."""
     if int(scan_stride) < 1 or int(export_point_stride) < 1:
         raise ValueError("scan_stride/export_point_stride must be >= 1")
     if int(batch_ray_limit) < 1:
@@ -93,19 +95,22 @@ def stream_livox_ground_aware_evidence(
         scan_index = -1
         origins = []
         endpoints = []
+        scan_ids = []
         buffered = 0
 
         def flush():
-            nonlocal origins, endpoints, buffered
+            nonlocal origins, endpoints, scan_ids, buffered
             if buffered == 0:
                 return None
             bundle = validate_observation_ray_bundle(
                 np.concatenate(origins, axis=0),
                 np.concatenate(endpoints, axis=0),
                 frame_id=output_frame_id,
+                scan_index=np.concatenate(scan_ids, axis=0),
             )
             origins = []
             endpoints = []
+            scan_ids = []
             buffered = 0
             return bundle
 
@@ -205,9 +210,13 @@ def stream_livox_ground_aware_evidence(
 
             origins.append(chunk_origins)
             endpoints.append(chunk_endpoints)
+            scan_ids.append(np.full((valid_count,), scan_index, dtype=np.int64))
             buffered += valid_count
             stats["pose_supported_ray_count"] += valid_count
 
+            # Flush only after the complete physical scan has been appended. This
+            # guarantees one scan never appears in two batches, so scan-support
+            # counts can be summed across batches without double counting.
             if buffered >= int(batch_ray_limit):
                 bundle = flush()
                 if bundle is not None:
