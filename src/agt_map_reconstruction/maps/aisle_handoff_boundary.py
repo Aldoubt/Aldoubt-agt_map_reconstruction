@@ -27,7 +27,7 @@ def _distance_to_mask(mask, resolution):
     return np.full(mask.shape, np.inf, dtype=float)
 
 
-def _boundary_source(point_xy, distance_hard, distance_unknown, resolution):
+def _nearest_source_at_xy(point_xy, distance_hard, distance_unknown, resolution):
     x, y = np.rint(np.asarray(point_xy, dtype=float)).astype(int)
     if y < 0 or x < 0 or y >= distance_hard.shape[0] or x >= distance_hard.shape[1]:
         return "out_of_map"
@@ -58,7 +58,6 @@ def _choose_boundary_cell(
     selected_t,
     full_start,
     vector,
-    direction,
     normal,
     distance_to_nonfree,
     resolution,
@@ -123,6 +122,12 @@ def _handoff_record(
     point = np.asarray(boundary["point"], dtype=float)
     t = float(boundary["t"])
     heading = float(aisle.get("heading_rad", 0.0))
+    nearest_source = _nearest_source_at_xy(
+        point,
+        distance_hard,
+        distance_unknown,
+        resolution,
+    )
     return {
         "s_over_l": t,
         "s_m": t * float(length_m),
@@ -131,12 +136,127 @@ def _handoff_record(
         "heading_rad": heading,
         "cross_track_offset_m": float(boundary["cross_track_offset_m"]),
         "clearance_m": float(boundary["clearance_m"]),
-        "boundary_source": _boundary_source(
-            point,
-            distance_hard,
-            distance_unknown,
-            resolution,
-        ),
+        "boundary_nearest_source": nearest_source,
+        # Kept for schema-1 readers. Do not interpret this as the cause of the
+        # entire entry/exit transition zone; use transition.dominant_source.
+        "boundary_source": nearest_source,
+    }
+
+
+def _dominant_from_counts(hard_count, unknown_count, mixed_count=0):
+    hard_count = int(hard_count)
+    unknown_count = int(unknown_count)
+    mixed_count = int(mixed_count)
+    if hard_count == 0 and unknown_count == 0 and mixed_count == 0:
+        return "none"
+    maximum = max(hard_count, unknown_count, mixed_count)
+    winners = []
+    if hard_count == maximum:
+        winners.append("hard")
+    if unknown_count == maximum:
+        winners.append("unknown")
+    if mixed_count == maximum:
+        winners.append("mixed")
+    return winners[0] if len(winners) == 1 else "mixed"
+
+
+def _transition_record(
+    side,
+    t_all,
+    yy,
+    xx,
+    start_t,
+    end_t,
+    length_m,
+    safe,
+    hard,
+    unknown,
+    distance_hard,
+    distance_unknown,
+    resolution,
+):
+    """Summarize why the area outside the selected row core is not safe.
+
+    ``boundary_nearest_source`` describes only one safe handoff cell. This
+    transition summary instead classifies every clearance-blocked cell in the
+    entry/exit transition zone by the nearest hard/unknown source, while also
+    retaining direct hard/unknown cell counts for traceability.
+    """
+    if side == "entry":
+        transition = (t_all >= 0.0) & (t_all < float(start_t) - 1e-12)
+        length = max(0.0, float(start_t) * float(length_m))
+    elif side == "exit":
+        transition = (t_all > float(end_t) + 1e-12) & (t_all <= 1.0)
+        length = max(0.0, (1.0 - float(end_t)) * float(length_m))
+    else:
+        raise ValueError("side must be entry or exit")
+
+    local_y = yy[transition]
+    local_x = xx[transition]
+    if local_y.size == 0:
+        return {
+            "side": side,
+            "length_m": length,
+            "cell_count": 0,
+            "blocked_cell_count": 0,
+            "direct_hard_cell_count": 0,
+            "direct_unknown_cell_count": 0,
+            "nearest_hard_blocked_cell_count": 0,
+            "nearest_unknown_blocked_cell_count": 0,
+            "nearest_mixed_blocked_cell_count": 0,
+            "dominant_source": "none",
+        }
+
+    local_safe = safe[local_y, local_x]
+    blocked = ~local_safe
+    blocked_y = local_y[blocked]
+    blocked_x = local_x[blocked]
+
+    direct_hard = int(np.count_nonzero(hard[local_y, local_x]))
+    direct_unknown = int(np.count_nonzero(unknown[local_y, local_x]))
+
+    nearest_hard = 0
+    nearest_unknown = 0
+    nearest_mixed = 0
+    tolerance = 0.25 * float(resolution)
+    for y, x in zip(blocked_y, blocked_x):
+        if hard[y, x]:
+            nearest_hard += 1
+            continue
+        if unknown[y, x]:
+            nearest_unknown += 1
+            continue
+        dh = float(distance_hard[y, x])
+        du = float(distance_unknown[y, x])
+        if not np.isfinite(dh) and not np.isfinite(du):
+            nearest_mixed += 1
+        elif not np.isfinite(dh):
+            nearest_unknown += 1
+        elif not np.isfinite(du):
+            nearest_hard += 1
+        elif abs(dh - du) <= tolerance:
+            nearest_mixed += 1
+        elif dh < du:
+            nearest_hard += 1
+        else:
+            nearest_unknown += 1
+
+    dominant = _dominant_from_counts(
+        nearest_hard,
+        nearest_unknown,
+        nearest_mixed,
+    )
+    return {
+        "side": side,
+        "length_m": length,
+        "cell_count": int(local_y.size),
+        "blocked_cell_count": int(blocked_y.size),
+        "direct_hard_cell_count": direct_hard,
+        "direct_unknown_cell_count": direct_unknown,
+        "nearest_hard_blocked_cell_count": int(nearest_hard),
+        "nearest_unknown_blocked_cell_count": int(nearest_unknown),
+        "nearest_mixed_blocked_cell_count": int(nearest_mixed),
+        "dominant_source": dominant,
     }
 
 
@@ -209,6 +329,8 @@ def estimate_aisle_handoff_boundary(
             "row_core_length_m": 0.0,
             "entry_transition_length_m": None,
             "exit_transition_length_m": None,
+            "entry_transition": None,
+            "exit_transition": None,
         }
 
     midpoint = 0.5 * (full_start + full_end)
@@ -250,7 +372,6 @@ def estimate_aisle_handoff_boundary(
         selected_t,
         full_start,
         vector,
-        direction,
         normal,
         distance_to_nonfree,
         resolution,
@@ -261,7 +382,6 @@ def estimate_aisle_handoff_boundary(
         selected_t,
         full_start,
         vector,
-        direction,
         normal,
         distance_to_nonfree,
         resolution,
@@ -291,6 +411,36 @@ def estimate_aisle_handoff_boundary(
         resolution,
         metadata=metadata,
     )
+    entry_transition = _transition_record(
+        "entry",
+        t_all,
+        yy,
+        xx,
+        start_t,
+        end_t,
+        length_m,
+        safe,
+        hard,
+        unknown,
+        distance_hard,
+        distance_unknown,
+        resolution,
+    )
+    exit_transition = _transition_record(
+        "exit",
+        t_all,
+        yy,
+        xx,
+        start_t,
+        end_t,
+        length_m,
+        safe,
+        hard,
+        unknown,
+        distance_hard,
+        distance_unknown,
+        resolution,
+    )
 
     return {
         "aisle_id": int(aisle.get("aisle_id", 0)),
@@ -306,6 +456,8 @@ def estimate_aisle_handoff_boundary(
         "row_core_length_m": max(0.0, (end_t - start_t) * length_m),
         "entry_transition_length_m": max(0.0, start_t * length_m),
         "exit_transition_length_m": max(0.0, (1.0 - end_t) * length_m),
+        "entry_transition": entry_transition,
+        "exit_transition": exit_transition,
         "entry_handoff": entry,
         "exit_handoff": exit_,
     }
