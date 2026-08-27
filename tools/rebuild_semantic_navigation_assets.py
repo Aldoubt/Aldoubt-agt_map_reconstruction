@@ -90,6 +90,7 @@ def main():
     support_ratio = float(policy.get("min_longitudinal_support_ratio", 0.50))
     min_width_m = float(policy.get("min_width_m", 0.30))
     min_length_m = float(policy.get("min_length_m", 2.0))
+    wide_band_iqr_factor = float(policy.get("wide_band_iqr_factor", 1.50))
 
     if args.row_direction is None:
         direction = infer_row_direction_from_evidence(
@@ -111,6 +112,7 @@ def main():
         min_length_m=min_length_m,
         include_interpolated=include_interpolated,
         occupied_aisle_conflict_policy=args.occupied_aisle_conflicts,
+        wide_band_iqr_factor=wide_band_iqr_factor,
     )
 
     rebuild_manifest = {
@@ -119,6 +121,11 @@ def main():
         "source_manifest": str(manifest_path),
         "row_direction_source": direction_source,
         "row_direction": result["manifest"]["row_direction"],
+        "raw_row_band_count": result["manifest"]["raw_row_band_count"],
+        "aisle_count": result["manifest"]["aisle_count"],
+        "open_area_candidate_count": result["manifest"][
+            "open_area_candidate_count"
+        ],
         "geometry_policy": result["manifest"]["geometry_policy"],
     }
     output.mkdir(parents=True, exist_ok=True)
@@ -128,10 +135,15 @@ def main():
     )
 
     print("output:", output)
+    print("raw_row_bands:", result["manifest"]["raw_row_band_count"])
     print("aisles:", result["manifest"]["aisle_count"])
+    print("open_area_candidates:", result["manifest"]["open_area_candidate_count"])
     print("row_direction:", result["manifest"]["row_direction"])
     print("evidence_counts:", result["manifest"]["evidence_counts"])
-    print("aisle_conflict_candidates:", result["manifest"]["aisle_conflict_candidate_count"])
+    print(
+        "aisle_conflict_candidates:",
+        result["manifest"]["aisle_conflict_candidate_count"],
+    )
     print("nav2_map:", output / "navigation" / "navigation_base_map.yaml")
 
 
