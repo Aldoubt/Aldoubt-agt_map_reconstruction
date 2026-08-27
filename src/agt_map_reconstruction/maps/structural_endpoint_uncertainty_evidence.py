@@ -47,6 +47,13 @@ def _validate_inputs(base_map, ground_reference, scan_support_count, masks, ray_
     return base, ground, scan, prepared, ray
 
 
+def _fraction(numerator, denominator):
+    denominator = int(denominator)
+    if denominator <= 0:
+        return None
+    return float(int(numerator) / denominator)
+
+
 def _roi_stats(base, ground, scan, roi, *, min_repeated_scans, ray=None):
     mask = np.asarray(roi, dtype=bool)
     threshold = int(min_repeated_scans)
@@ -57,19 +64,54 @@ def _roi_stats(base, ground, scan, roi, *, min_repeated_scans, ray=None):
     no_observation = unknown_ground & (scan < 1)
     single_scan = unknown_ground & (scan >= 1) & (scan < threshold)
     repeated_scan = unknown_ground & (scan >= threshold)
+    scan_observed = single_scan | repeated_scan
     ray_supported = None if ray is None else unknown_ground & (ray >= 1)
     partition = no_ground | no_observation | single_scan | repeated_scan
+
+    roi_count = int(np.count_nonzero(mask))
+    unknown_count = int(np.count_nonzero(unknown))
+    trusted_ground_count = int(np.count_nonzero(unknown_ground))
+    no_ground_count = int(np.count_nonzero(no_ground))
+    no_observation_count = int(np.count_nonzero(no_observation))
+    single_scan_count = int(np.count_nonzero(single_scan))
+    repeated_scan_count = int(np.count_nonzero(repeated_scan))
+    scan_observed_count = int(np.count_nonzero(scan_observed))
+    ray_supported_count = None if ray_supported is None else int(np.count_nonzero(ray_supported))
+
     return {
-        "roi_cell_count": int(np.count_nonzero(mask)),
+        "roi_cell_count": roi_count,
         "free_cell_count": int(np.count_nonzero(mask & (base == FREE_VALUE))),
         "occupied_cell_count": int(np.count_nonzero(mask & (base == OCCUPIED_VALUE))),
-        "unknown_cell_count": int(np.count_nonzero(unknown)),
-        "unknown_no_ground_reference_cell_count": int(np.count_nonzero(no_ground)),
-        "unknown_ground_reference_no_observation_cell_count": int(np.count_nonzero(no_observation)),
-        "unknown_single_scan_support_cell_count": int(np.count_nonzero(single_scan)),
-        "unknown_repeated_scan_support_cell_count": int(np.count_nonzero(repeated_scan)),
-        "ray_supported_unknown_cell_count": (
-            None if ray_supported is None else int(np.count_nonzero(ray_supported))
+        "unknown_cell_count": unknown_count,
+        "unknown_fraction_of_roi": _fraction(unknown_count, roi_count),
+        "trusted_ground_unknown_cell_count": trusted_ground_count,
+        "ground_reference_ceiling_fraction_of_unknown": _fraction(
+            trusted_ground_count,
+            unknown_count,
+        ),
+        "unknown_no_ground_reference_cell_count": no_ground_count,
+        "unknown_no_ground_reference_fraction": _fraction(no_ground_count, unknown_count),
+        "unknown_ground_reference_no_observation_cell_count": no_observation_count,
+        "ground_reference_no_observation_fraction_of_trusted_ground_unknown": _fraction(
+            no_observation_count,
+            trusted_ground_count,
+        ),
+        "unknown_single_scan_support_cell_count": single_scan_count,
+        "unknown_repeated_scan_support_cell_count": repeated_scan_count,
+        "scan_observed_unknown_cell_count": scan_observed_count,
+        "scan_observed_fraction_of_trusted_ground_unknown": _fraction(
+            scan_observed_count,
+            trusted_ground_count,
+        ),
+        "repeated_scan_fraction_of_trusted_ground_unknown": _fraction(
+            repeated_scan_count,
+            trusted_ground_count,
+        ),
+        "ray_supported_unknown_cell_count": ray_supported_count,
+        "ray_supported_fraction_of_trusted_ground_unknown": (
+            None
+            if ray_supported_count is None
+            else _fraction(ray_supported_count, trusted_ground_count)
         ),
         "unknown_partition_cell_count": int(np.count_nonzero(partition)),
     }
@@ -97,7 +139,7 @@ def evaluate_uncertainty_roi_observation_sufficiency(
     )
 
     result = {
-        "schema_version": 1,
+        "schema_version": 2,
         "method": "fused_structural_roi_observation_sufficiency",
         "grid_shape_yx": list(base.shape),
         "min_repeated_scans": threshold,
@@ -149,6 +191,8 @@ def evaluate_uncertainty_roi_observation_sufficiency(
             "frozen_evidence_reused": True,
             "structural_roi_recomputed_from_evidence": False,
             "unresolved_cross_strip_promoted_to_resolved": False,
+            "ground_reference_ceiling_is_semantic_free": False,
+            "ground_reference_ceiling_is_navigation_acceptance": False,
             "evaluation_overlay_only": True,
             "automatic_acceptance": False,
             "navigation_map_modified": False,
