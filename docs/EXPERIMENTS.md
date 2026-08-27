@@ -626,7 +626,7 @@ Next stage: EXP004-C Headland Handoff & Ackermann Transition
 
 ## P1 Evidence-driven Greenhouse Semantic Reconstruction
 
-Status: P1-A through P1-D replay-validated and frozen on 2026-08-27. P1-E0 observation-ray interface and conservative support accumulator are implemented; real trajectory-ray replay is pending.
+Status: P1-A through P1-D replay-validated and frozen on 2026-08-27. P1-E0 ground-reference feasibility is replay-validated and frozen; P1-E1 observation-source inventory is implemented; real trajectory-ray replay is pending.
 
 Goal:
 
@@ -804,15 +804,153 @@ P1-D3 conclusion:
 
 The common endpoint-side geometry is plausible, but the LIO-only PCD does not contain enough observed-free evidence to recover a trustworthy headland. The correct result is `HEADLAND NOT RECOVERED: insufficient observation evidence`, not semantic promotion of unknown space.
 
-### P1-E0 Trajectory-aware observation evidence
+### P1-E0 Ground-reference feasibility for trajectory-aware evidence
 
-Status: implementation complete; real rosbag/trajectory-ray replay pending.
+Status: replay-validated and frozen on 2026-08-27. No ground-reference model is permitted to promote semantics by itself.
 
 Motivation:
 
-An aggregate PCD keeps return coordinates but loses the sensor origin of each return. P1-E restores line-of-sight provenance instead of filling unknown space morphologically.
+A 3D ray needs a ground-height reference to distinguish low line-of-sight from a ray passing through vegetation above the ground. That reference is geometry only. It must not be confused with observed-free evidence.
 
-Frozen ray bundle contract:
+#### P1-E0.1 Global versus local ground reference
+
+Global affine plane baseline fitted from 462001 finite ground cells:
+
+```text
+extrapolated cells:       264863
+residual RMSE:            0.269169 m
+residual p95 |error|:     0.698019 m
+semantic_promotion:       false
+```
+
+Conclusion: one global affine plane is rejected as a ray-height reference because its error is comparable to or larger than the low-height band the later ray test needs to resolve.
+
+KNN local affine leave-one-out replay:
+
+| neighbors | invalid grid fits | CV RMSE | CV p95 abs |
+| ---: | ---: | ---: | ---: |
+| 8 | 46 | 0.033255 m | 0.039169 m |
+| 16 | 0 | 0.039425 m | 0.060974 m |
+| 32 | 0 | 0.049763 m | 0.096431 m |
+| 64 | 0 | 0.064004 m | 0.143180 m |
+
+Whole-map unknown distance to nearest finite ground support:
+
+```text
+median:  2.559785 m
+p95:     7.208889 m
+max:    10.009621 m
+```
+
+Local CV is substantially better than the global plane, but local fit quality on observed support is not evidence that distant unknown extrapolation is reliable. K=8 and K=16 remain diagnostic reference scales; K>=32 increasingly smooths across local terrain variation.
+
+#### P1-E0.2 Endpoint extrapolation confidence
+
+The audit reuses the frozen P1-D3 entry/exit ROI exactly; it does not recompute a different endpoint geometry.
+
+Measured entry ROI:
+
+```text
+unknown cells:                         70319
+nearest-support distance median:       3.231099 m
+nearest-support distance p95:          7.923698 m
+K8/K16/K32/K64 range median:           0.725550 m
+K8/K16/K32/K64 range p95:              5.287877 m
+K8-K16 absolute difference median:     0.274724 m
+K8-K16 absolute difference p95:        2.791129 m
+K8-K16 absolute difference max:        9.694472 m
+```
+
+Measured exit ROI:
+
+```text
+unknown cells:                         47934
+nearest-support distance median:       2.352127 m
+nearest-support distance p95:          6.238990 m
+K8/K16/K32/K64 range median:           0.798726 m
+K8/K16/K32/K64 range p95:              9.984741 m
+K8-K16 absolute difference median:     0.331552 m
+K8-K16 absolute difference p95:        6.516942 m
+K8-K16 absolute difference max:       23.337381 m
+```
+
+All models return numeric values for essentially all endpoint unknown cells, but numerical validity is not geometric confidence. The large K8/K16 disagreement proves that the missing endpoint ground surface is not recoverable merely by choosing a different local-neighborhood size.
+
+Interpretation:
+
+```text
+local CV good
+!= endpoint extrapolation stable
+!= ground reference suitable for ray free evidence
+```
+
+#### P1-E0.3 Endpoint confidence-gate sensitivity
+
+Two independent conditions were swept over the same frozen D3 ROI:
+
+1. maximum distance to real finite ground support;
+2. maximum K8/K16 height disagreement.
+
+At the strict `K8/K16 disagreement <= 0.05 m` gate, accepted unknown fractions are:
+
+| max support distance | entry | exit |
+| ---: | ---: | ---: |
+| 0.25 m | 0.035950 | 0.049902 |
+| 0.50 m | 0.064378 | 0.088518 |
+| 1.00 m | 0.108534 | 0.144031 |
+| 2.00 m | 0.158990 | 0.194663 |
+| 4.00 m | 0.202335 | 0.222285 |
+
+Coverage only rises toward one half of endpoint unknown space after accepting very weak geometry. For example, at a 4.0 m support-distance gate:
+
+```text
+max K8/K16 disagreement 0.50 m -> entry 0.458596, exit 0.510535
+max K8/K16 disagreement 1.00 m -> entry 0.531748, exit 0.591230
+```
+
+No low-uncertainty / high-coverage plateau was observed.
+
+P1-E0 conclusion:
+
+PCD-derived ground geometry can provide only a low-coverage, high-confidence fringe around observed endpoint terrain. Increasing endpoint coverage requires accepting metre-scale extrapolation distance and/or decimetre-to-metre model disagreement. Therefore P1-E must not complete the headland from ground interpolation. The next source of evidence must be observation provenance from the original trajectory / LiDAR rays or a targeted rescan.
+
+Ground-reference consensus remains diagnostic and confidence-gated:
+
+```text
+K8 + K16
+   |
+   +-- distance-to-observed-ground gate
+   +-- K8/K16 disagreement gate
+   v
+consensus height on trusted cells
+NaN on untrusted cells
+```
+
+The ray accumulator already treats NaN ground reference as unsupported and never marks the return/hit cell free. `semantic_promotion=false` remains mandatory.
+
+### P1-E1 Observation-source inventory
+
+Status: metadata inventory implementation complete; real rosbag inventory replay pending.
+
+The first E1 step intentionally does not assume a ROS message family. Rosbag2 `metadata.yaml` is inspected offline to report candidates for:
+
+- LiDAR returns (`sensor_msgs/msg/PointCloud2`, Livox `CustomMsg`, or other named candidates);
+- pose / odometry;
+- `/tf` or equivalent transform streams;
+- IMU.
+
+Implementation:
+
+```text
+src/agt_map_reconstruction/io/rosbag_observation_inventory.py
+tools/inventory_rosbag_observation_sources.py
+tests/test_rosbag_observation_inventory.py
+tests/test_rosbag_observation_inventory_cli.py
+```
+
+The inventory never chooses a source automatically. The actual ray exporter must be implemented against the recorded message types, timestamp convention, pose source, and LiDAR-to-body extrinsic found in the real bag.
+
+Frozen observation-ray interface:
 
 ```text
 observation_rays.npz
@@ -824,37 +962,13 @@ observation_rays.npz
 └── scan_index            (optional N)
 ```
 
-Implementation:
-
-```text
-src/agt_map_reconstruction/maps/observation_ray_bundle.py
-src/agt_map_reconstruction/maps/ground_reference_plane.py
-src/agt_map_reconstruction/maps/ground_aware_ray_evidence.py
-tools/fit_ground_reference_plane.py
-tools/build_ground_aware_ray_evidence.py
-docs/interfaces/observation_ray_bundle.md
-```
-
-Important separation:
-
-- the P1-A semantic `ground_surface.npy` is NaN in unknown cells by design;
-- P1-E therefore fits an explicit affine geometry-only `ground_reference.npy` from finite ground-model support;
-- affine residual RMSE / median / p95 / max are reported before the reference is used;
-- extrapolated ground-reference values are not free-space evidence;
-- a 3D ray supports a cell only when its in-cell segment lies in an explicitly configured low-height band above the ground reference;
-- the return/hit cell is never marked free;
-- output is `ray_free_support_count.npy` and `ray_free_support_mask.npy` only;
-- `semantic_promotion=false` remains mandatory for P1-E0.
-
-No paper parameter is frozen yet for the low-height band or minimum ray support count. Those values are explicit CLI inputs and require real-ray sensitivity analysis.
-
 P1-E acceptance question:
 
-Does trajectory-aware ray evidence materially increase strict observed-free endpoint coverage and reduce endpoint distance relative to the frozen P1-D3 PCD-only baseline without promoting unsupported high-canopy rays or hard obstacles?
+Does trajectory-aware 3D ray evidence materially increase strict observed-free endpoint coverage and reduce endpoint distance relative to the frozen P1-D3 PCD-only baseline, while rejecting high-canopy rays, low-confidence ground extrapolation, and hard obstacles?
 
 ### P1 freeze boundary
 
-P1-A through P1-D are frozen. Do not change the PGM, candidate policy, row classifier, aisle denominator, or handoff definitions to improve headland appearance. New progress must come from additional observation provenance or new measured data, then be evaluated against the same D3 endpoint metrics.
+P1-A through P1-E0 are frozen. Do not change the PGM, candidate policy, row classifier, aisle denominator, handoff definitions, or ground-reference model to improve headland appearance. New progress must come from additional observation provenance or new measured data, then be evaluated against the same D3 endpoint metrics.
 
 Primary output roots:
 
@@ -863,6 +977,14 @@ results/P1/greenhouse_01_region_split/
 ├── navigation/
 ├── diagnostics/
 ├── handoffs/
+├── observation/
+│   ├── ground_reference_plane/
+│   ├── local_ground_reference_k8/
+│   ├── local_ground_reference_k16/
+│   ├── local_ground_reference_k32/
+│   ├── local_ground_reference_k64/
+│   ├── endpoint_ground_reference_confidence/
+│   └── endpoint_ground_reference_gate_sweep_k8_k16/
 └── topology/
     ├── r020/
     ├── headland_geometry_audit/
