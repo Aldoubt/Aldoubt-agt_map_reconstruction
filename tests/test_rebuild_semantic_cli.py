@@ -59,8 +59,14 @@ def test_rebuild_semantic_cli_reuses_existing_evidence_without_pcd(tmp_path):
     rebuilt = json.loads((output / "semantic_manifest.json").read_text())
     assert rebuilt["grid"] == source_manifest["grid"]
     assert rebuilt["row_direction"] == [1.0, 0.0]
+    assert rebuilt["raw_row_band_count"] == 3
     assert rebuilt["aisle_count"] == 3
+    assert rebuilt["open_area_candidate_count"] == 0
     assert rebuilt["geometry_policy"]["occupied_aisle_conflict_policy"] == "candidate"
     assert rebuilt["aisle_conflict_candidate_count"] == 1
+    assert "raw_row_bands: 3" in completed.stdout
+    assert "aisles: 3" in completed.stdout
+    assert "open_area_candidates: 0" in completed.stdout
+    assert (output / "row_band_regions.json").is_file()
     assert (output / "navigation" / "navigation_base_map.yaml").is_file()
     assert (output / "rebuild_manifest.json").is_file()
