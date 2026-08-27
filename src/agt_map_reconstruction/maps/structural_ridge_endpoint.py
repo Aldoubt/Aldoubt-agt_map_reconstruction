@@ -1,11 +1,4 @@
-"""Inter-aisle ridge profiles and boundary-anchored structural endpoints for D3.1 v2.
-
-The v1 implementation sampled generic HARD cells beside each aisle and selected the
-longest persistent run. In greenhouse maps this can latch onto walls, facilities or
-an arbitrary internal occupied segment. V2 instead constructs explicit structural
-bands between adjacent recovered aisles and finds the first sustained ridge support
-when scanning inward from each longitudinal boundary.
-"""
+"""Inter-aisle ridge profiles and boundary-anchored structural endpoints for D3.1 v2."""
 
 from __future__ import annotations
 
@@ -42,15 +35,13 @@ def _row_geometry(row, axis, cross):
         raise ValueError("row centerline_xy must be 2x2")
     pu = polygon @ axis
     pv = polygon @ cross
-    center_v = float(np.mean(line @ cross))
     return {
-        "row": row,
         "label": str(row.get("label", "")),
         "u_min": float(np.min(pu)),
         "u_max": float(np.max(pu)),
         "v_min": float(np.min(pv)),
         "v_max": float(np.max(pv)),
-        "center_v": center_v,
+        "center_v": float(np.mean(line @ cross)),
     }
 
 
@@ -62,13 +53,12 @@ def build_inter_aisle_ridge_profiles(
     bin_size_m,
     row_axis=None,
 ):
-    """Build HARD/UNKNOWN profiles in bands between adjacent row aisles."""
+    """Build HARD/UNKNOWN profiles inside bands between adjacent aisle polygons."""
     base = _validate_base_map(base_map)
     resolution = float(resolution_m)
     bin_size = float(bin_size_m)
     if resolution <= 0.0 or bin_size <= 0.0:
         raise ValueError("resolution_m and bin_size_m must be > 0")
-
     rows = [item for item in rows if item.get("region_class", "row_aisle") == "row_aisle"]
     if len(rows) < 2:
         return []
@@ -84,64 +74,51 @@ def build_inter_aisle_ridge_profiles(
             elif float(direction @ reference) < 0.0:
                 direction = -direction
             directions.append(direction)
-        axis = _unit(np.mean(np.stack(directions, axis=0), axis=0))
+        axis = _unit(np.mean(np.stack(directions), axis=0))
     else:
         axis = _unit(row_axis)
     cross = np.array([-axis[1], axis[0]], dtype=np.float64)
-
     geom = sorted((_row_geometry(row, axis, cross) for row in rows), key=lambda x: x["center_v"])
+
     yy, xx = np.indices(base.shape)
-    points = np.column_stack((xx.reshape(-1), yy.reshape(-1))).astype(np.float64)
+    points = np.column_stack((xx.ravel(), yy.ravel())).astype(np.float64)
     all_u = points @ axis
     all_v = points @ cross
-    values = base.reshape(-1)
+    values = base.ravel()
     bin_size_cells = bin_size / resolution
 
     profiles = []
-    for index in range(len(geom) - 1):
-        lower = geom[index]
-        upper = geom[index + 1]
-        v0 = float(lower["v_max"])
-        v1 = float(upper["v_min"])
+    for lower, upper in zip(geom[:-1], geom[1:]):
+        v0, v1 = float(lower["v_max"]), float(upper["v_min"])
         u0 = max(float(lower["u_min"]), float(upper["u_min"]))
         u1 = min(float(lower["u_max"]), float(upper["u_max"]))
         if v1 <= v0 + 1e-9 or u1 <= u0 + 1e-9:
             continue
 
-        ridge_mask = (
+        region = (
             (all_v > v0 + 1e-12)
             & (all_v < v1 - 1e-12)
             & (all_u >= u0 - 1e-12)
             & (all_u <= u1 + 1e-12)
         )
-        bin_count = int(np.ceil((u1 - u0) / bin_size_cells))
-        if bin_count <= 0:
-            continue
-        edges = u0 + np.arange(bin_count + 1, dtype=np.float64) * bin_size_cells
+        count = int(np.ceil((u1 - u0) / bin_size_cells))
+        edges = u0 + np.arange(count + 1, dtype=np.float64) * bin_size_cells
         edges[-1] = u1
         centers = 0.5 * (edges[:-1] + edges[1:])
         center_v = 0.5 * (v0 + v1)
         center_xy = centers[:, None] * axis[None, :] + center_v * cross[None, :]
 
-        hard_fraction = []
-        unknown_fraction = []
-        cell_count = []
-        for bin_index in range(bin_count):
-            lo = float(edges[bin_index])
-            hi = float(edges[bin_index + 1])
-            if bin_index + 1 == bin_count:
-                in_bin = (all_u >= lo - 1e-12) & (all_u <= hi + 1e-12)
-            else:
-                in_bin = (all_u >= lo - 1e-12) & (all_u < hi - 1e-12)
-            sample = values[ridge_mask & in_bin]
-            count = int(sample.size)
-            cell_count.append(count)
-            if count == 0:
-                hard_fraction.append(0.0)
-                unknown_fraction.append(0.0)
-            else:
-                hard_fraction.append(float(np.count_nonzero(sample == OCCUPIED_VALUE) / count))
-                unknown_fraction.append(float(np.count_nonzero(sample == UNKNOWN_VALUE) / count))
+        hard_fraction, unknown_fraction, cell_count = [], [], []
+        for index in range(count):
+            lo, hi = float(edges[index]), float(edges[index + 1])
+            in_bin = (all_u >= lo - 1e-12) & (
+                (all_u <= hi + 1e-12) if index + 1 == count else (all_u < hi - 1e-12)
+            )
+            sample = values[region & in_bin]
+            n = int(sample.size)
+            cell_count.append(n)
+            hard_fraction.append(0.0 if n == 0 else float(np.count_nonzero(sample == OCCUPIED_VALUE) / n))
+            unknown_fraction.append(0.0 if n == 0 else float(np.count_nonzero(sample == UNKNOWN_VALUE) / n))
 
         profiles.append(
             {
@@ -174,32 +151,29 @@ def build_inter_aisle_ridge_profiles(
 
 def _close_short_internal_gaps(mask, max_gap_bins):
     values = np.asarray(mask, dtype=bool).copy()
-    index = 0
-    while index < values.size:
-        if values[index]:
-            index += 1
+    i = 0
+    while i < values.size:
+        if values[i]:
+            i += 1
             continue
-        start = index
-        while index < values.size and not values[index]:
-            index += 1
-        end = index
+        start = i
+        while i < values.size and not values[i]:
+            i += 1
         if (
             max_gap_bins > 0
             and start > 0
-            and end < values.size
+            and i < values.size
             and values[start - 1]
-            and values[end]
-            and end - start <= max_gap_bins
+            and values[i]
+            and i - start <= max_gap_bins
         ):
-            values[start:end] = True
+            values[start:i] = True
     return values
 
 
 def _first_sustained_from_edge(mask, min_bins, side):
     values = np.asarray(mask, dtype=bool)
     n = int(values.size)
-    if n < min_bins:
-        return None
     if side == "entry":
         for start in range(0, n - min_bins + 1):
             if bool(np.all(values[start : start + min_bins])):
@@ -220,7 +194,7 @@ def detect_ridge_terminations(
     min_persistence_m,
     max_internal_gap_m,
 ):
-    """Detect ridge ends by scanning inward from both longitudinal boundaries."""
+    """Find first sustained ridge support while scanning inward from each end."""
     support = np.asarray(profile["hard_support_fraction"], dtype=np.float64)
     edges = np.asarray(profile["bin_edges_u_cells"], dtype=np.float64)
     if support.ndim != 1 or edges.shape != (support.size + 1,):
@@ -241,42 +215,42 @@ def detect_ridge_terminations(
     closed = _close_short_internal_gaps(raw, max_gap_bins)
     entry_bin = _first_sustained_from_edge(closed, min_bins, "entry")
     exit_bin = _first_sustained_from_edge(closed, min_bins, "exit")
+
+    common = {
+        "schema_version": 2,
+        "ridge_id": profile["ridge_id"],
+        "left_aisle_label": profile["left_aisle_label"],
+        "right_aisle_label": profile["right_aisle_label"],
+        "resolution_m": resolution,
+        "support_mask": closed.tolist(),
+    }
     if entry_bin is None or exit_bin is None or entry_bin >= exit_bin:
         return {
-            "schema_version": 2,
-            "ridge_id": profile["ridge_id"],
-            "left_aisle_label": profile["left_aisle_label"],
-            "right_aisle_label": profile["right_aisle_label"],
+            **common,
             "status": "insufficient_structural_support",
             "entry_u_cells": None,
             "exit_u_cells": None,
             "entry_grid_xy": None,
             "exit_grid_xy": None,
-            "support_mask": closed.tolist(),
         }
 
-    entry_u = float(edges[entry_bin])
-    exit_u = float(edges[exit_bin])
+    entry_u, exit_u = float(edges[entry_bin]), float(edges[exit_bin])
     axis = np.asarray(profile["row_axis_direction"], dtype=np.float64)
     cross = np.asarray(profile["cross_row_direction"], dtype=np.float64)
     v0, v1 = profile["ridge_cross_span_cells"]
     center_v = 0.5 * (float(v0) + float(v1))
 
     def point(u):
-        xy = float(u) * axis + center_v * cross
+        xy = u * axis + center_v * cross
         return [float(xy[0]), float(xy[1])]
 
     return {
-        "schema_version": 2,
-        "ridge_id": profile["ridge_id"],
-        "left_aisle_label": profile["left_aisle_label"],
-        "right_aisle_label": profile["right_aisle_label"],
+        **common,
         "status": "ok",
         "entry_u_cells": entry_u,
         "exit_u_cells": exit_u,
         "entry_grid_xy": point(entry_u),
         "exit_grid_xy": point(exit_u),
-        "support_mask": closed.tolist(),
         "parameters": {
             "min_support_fraction": threshold,
             "min_persistence_m": persistence,
@@ -305,24 +279,22 @@ def pair_aisle_structural_endpoints(
     axis = _unit(row_axis)
     cross = np.array([-axis[1], axis[0]], dtype=np.float64)
     geom = sorted((_row_geometry(row, axis, cross) for row in rows), key=lambda x: x["center_v"])
-    resolution = None
-    ridges = {}
-    for ridge in ridge_terminations:
-        ridges[(ridge["left_aisle_label"], ridge["right_aisle_label"])] = ridge
+    ridges = {
+        (item["left_aisle_label"], item["right_aisle_label"]): item
+        for item in ridge_terminations
+    }
     maximum = float(max_side_endpoint_disagreement_m)
 
     def make_side(left_ridge, right_ridge, side):
-        values = []
-        points = []
+        available = []
         for ridge in (left_ridge, right_ridge):
             if ridge is None or ridge.get("status") != "ok":
                 continue
-            value = ridge.get(f"{side}_u_cells")
-            point = ridge.get(f"{side}_grid_xy")
-            if value is not None and point is not None:
-                values.append(float(value))
-                points.append(np.asarray(point, dtype=np.float64))
-        if not values:
+            u = ridge.get(f"{side}_u_cells")
+            xy = ridge.get(f"{side}_grid_xy")
+            if u is not None and xy is not None:
+                available.append((float(u), np.asarray(xy, dtype=np.float64), float(ridge["resolution_m"])))
+        if not available:
             return {
                 "status": "insufficient_structural_support",
                 "structural_u_cells": None,
@@ -331,40 +303,27 @@ def pair_aisle_structural_endpoints(
                 "candidate_grid_xy": None,
                 "side_disagreement_m": None,
             }
-        if len(values) == 1:
+        if len(available) == 1:
+            u, xy, _ = available[0]
             return {
                 "status": "ambiguous_single_side",
                 "structural_u_cells": None,
                 "structural_grid_xy": None,
-                "candidate_u_cells": values[0],
-                "candidate_grid_xy": points[0].tolist(),
+                "candidate_u_cells": u,
+                "candidate_grid_xy": xy.tolist(),
                 "side_disagreement_m": None,
             }
-        local_resolution = float(left_ridge.get("resolution_m", 1.0)) if left_ridge else 1.0
-        # detect_ridge_terminations does not need to persist resolution; infer from
-        # grid-cell disagreement using the source row-axis geometry only if absent.
-        if "resolution_m" in left_ridge:
-            local_resolution = float(left_ridge["resolution_m"])
-        elif "resolution_m" in right_ridge:
-            local_resolution = float(right_ridge["resolution_m"])
-        else:
-            local_resolution = 1.0
-        disagreement = abs(values[0] - values[1]) * local_resolution
-        candidate_u = 0.5 * (values[0] + values[1])
-        candidate_xy = 0.5 * (points[0] + points[1])
-        if disagreement > maximum + 1e-12:
-            return {
-                "status": "ambiguous_single_side",
-                "structural_u_cells": None,
-                "structural_grid_xy": None,
-                "candidate_u_cells": candidate_u,
-                "candidate_grid_xy": candidate_xy.tolist(),
-                "side_disagreement_m": disagreement,
-            }
+        (u0, p0, r0), (u1, p1, r1) = available
+        if not np.isclose(r0, r1):
+            raise ValueError("neighboring ridge resolutions do not match")
+        disagreement = abs(u0 - u1) * r0
+        candidate_u = 0.5 * (u0 + u1)
+        candidate_xy = 0.5 * (p0 + p1)
+        ok = disagreement <= maximum + 1e-12
         return {
-            "status": "ok_bilateral",
-            "structural_u_cells": candidate_u,
-            "structural_grid_xy": candidate_xy.tolist(),
+            "status": "ok_bilateral" if ok else "ambiguous_single_side",
+            "structural_u_cells": candidate_u if ok else None,
+            "structural_grid_xy": candidate_xy.tolist() if ok else None,
             "candidate_u_cells": candidate_u,
             "candidate_grid_xy": candidate_xy.tolist(),
             "side_disagreement_m": disagreement,
@@ -373,21 +332,15 @@ def pair_aisle_structural_endpoints(
     results = []
     for index, item in enumerate(geom):
         label = item["label"]
-        left_ridge = None
-        right_ridge = None
-        if index > 0:
-            left_label = geom[index - 1]["label"]
-            left_ridge = ridges.get((left_label, label))
-        if index + 1 < len(geom):
-            right_label = geom[index + 1]["label"]
-            right_ridge = ridges.get((label, right_label))
+        left = None if index == 0 else ridges.get((geom[index - 1]["label"], label))
+        right = None if index + 1 == len(geom) else ridges.get((label, geom[index + 1]["label"]))
         results.append(
             {
                 "label": label,
-                "entry": make_side(left_ridge, right_ridge, "entry"),
-                "exit": make_side(left_ridge, right_ridge, "exit"),
-                "left_ridge_id": None if left_ridge is None else left_ridge["ridge_id"],
-                "right_ridge_id": None if right_ridge is None else right_ridge["ridge_id"],
+                "entry": make_side(left, right, "entry"),
+                "exit": make_side(left, right, "exit"),
+                "left_ridge_id": None if left is None else left["ridge_id"],
+                "right_ridge_id": None if right is None else right["ridge_id"],
             }
         )
     return results
