@@ -14,8 +14,8 @@ def build_parser():
     parser = argparse.ArgumentParser(
         description=(
             "Stream raw Livox CustomMsg observations through the selected FAST-LIVO2 "
-            "trajectory into a global ground-aware support-count grid without writing "
-            "a full observation_rays.npz."
+            "trajectory into global ground-aware ray- and scan-support grids without "
+            "writing a full observation_rays.npz."
         )
     )
     parser.add_argument("--benchmark-run", required=True)
@@ -122,8 +122,12 @@ def main():
         output / "ray_free_support_mask.npy",
         result["support_mask"].astype(np.uint8),
     )
+    if "scan_support_count" not in result:
+        raise RuntimeError("streaming evidence did not preserve scan identity")
+    np.save(output / "scan_free_support_count.npy", result["scan_support_count"])
+
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "source_contract": contract,
         "source_ground_reference": str(ground_path),
         "source_grid_manifest": str(manifest_path),
@@ -139,6 +143,11 @@ def main():
             "hit_cell_is_free": False,
             "requires_finite_ground_reference": True,
             "support_threshold_applied_after_global_accumulation": True,
+        },
+        "scan_support_policy": {
+            "definition": "at most one supporting vote per physical Livox scan per grid cell",
+            "threshold_applied": False,
+            "purpose": "density-independent temporal support diagnostic",
         },
         "streaming": {
             "scan_stride": int(args.scan_stride),
@@ -172,7 +181,9 @@ def main():
     print("pose_rejected_after:", s["pose_rejected_after_trajectory"])
     print("pose_rejected_gap:", s["pose_rejected_large_gap"])
     print("accepted_ground_aware_rays:", s["accepted_ray_count"])
-    print("supported_cells:", s["supported_cell_count"])
+    print("ray_supported_cells:", s["supported_cell_count"])
+    print("scan_supported_cells:", s["scan_supported_cell_count"])
+    print("max_scan_support_count:", s["max_scan_support_count"])
     print("batch_count:", s["batch_count"])
     print("full_ray_npz_written: false")
     print("navigation_map_modified: false")
