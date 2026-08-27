@@ -276,6 +276,10 @@ def estimate_aisle_handoff_boundary(
     not projections onto the geometric centreline, so a laterally shifted safe
     exit can be represented when the centreline probe is blocked.
 
+    ``status == ok`` means a safe component exists; it does not mean the aisle
+    is wide enough for the requested clearance diameter. Use
+    ``width_clearance_eligible`` and ``row_core_fraction`` for that distinction.
+
     No map cell is edited. ``metadata`` is optional; when supplied, exact
     map-frame handoff coordinates are emitted through ``GridMetadata``.
     """
@@ -302,6 +306,11 @@ def estimate_aisle_handoff_boundary(
     direction = vector / length_cells
     normal = np.array([-direction[1], direction[0]], dtype=float)
     length_m = float(aisle.get("length_m", length_cells * float(resolution)))
+    aisle_width_m = float(aisle.get("width_m", 0.0))
+    required_diameter_m = 2.0 * float(radius_m)
+    width_clearance_eligible = bool(
+        aisle_width_m + 1e-12 >= required_diameter_m
+    )
 
     free = base == FREE_VALUE
     hard = base == OCCUPIED_VALUE
@@ -318,6 +327,9 @@ def estimate_aisle_handoff_boundary(
             "aisle_id": int(aisle.get("aisle_id", 0)),
             "label": str(aisle.get("label", "")),
             "radius_m": float(radius_m),
+            "aisle_width_m": aisle_width_m,
+            "required_diameter_m": required_diameter_m,
+            "width_clearance_eligible": width_clearance_eligible,
             "status": "no_safe_component",
             "component_selection": None,
             "component_id": 0,
@@ -326,6 +338,7 @@ def estimate_aisle_handoff_boundary(
             "exit_handoff": None,
             "row_core_start_s_over_l": None,
             "row_core_end_s_over_l": None,
+            "row_core_fraction": 0.0,
             "row_core_length_m": 0.0,
             "entry_transition_length_m": None,
             "exit_transition_length_m": None,
@@ -392,6 +405,7 @@ def estimate_aisle_handoff_boundary(
     if end_t < start_t:
         entry_boundary, exit_boundary = exit_boundary, entry_boundary
         start_t, end_t = end_t, start_t
+    row_core_fraction = max(0.0, end_t - start_t)
 
     entry = _handoff_record(
         aisle,
@@ -446,6 +460,9 @@ def estimate_aisle_handoff_boundary(
         "aisle_id": int(aisle.get("aisle_id", 0)),
         "label": str(aisle.get("label", "")),
         "radius_m": float(radius_m),
+        "aisle_width_m": aisle_width_m,
+        "required_diameter_m": required_diameter_m,
+        "width_clearance_eligible": width_clearance_eligible,
         "status": "ok",
         "component_selection": component_selection,
         "component_id": int(selected_label),
@@ -453,7 +470,8 @@ def estimate_aisle_handoff_boundary(
         "component_cell_count": int(np.count_nonzero(selected)),
         "row_core_start_s_over_l": start_t,
         "row_core_end_s_over_l": end_t,
-        "row_core_length_m": max(0.0, (end_t - start_t) * length_m),
+        "row_core_fraction": row_core_fraction,
+        "row_core_length_m": row_core_fraction * length_m,
         "entry_transition_length_m": max(0.0, start_t * length_m),
         "exit_transition_length_m": max(0.0, (1.0 - end_t) * length_m),
         "entry_transition": entry_transition,
