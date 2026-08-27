@@ -39,7 +39,7 @@ def rasterize_aisles(rectangles, shape):
     return mask.astype(bool)
 
 
-def build_navigation_layers(semantic_labels, aisle_rectangles):
+def build_navigation_layers(semantic_labels, aisle_rectangles, promote_aisle_prior=True):
     semantic = np.asarray(semantic_labels)
     if semantic.ndim != 2:
         raise ValueError('semantic_labels must be a 2D array')
@@ -47,7 +47,9 @@ def build_navigation_layers(semantic_labels, aisle_rectangles):
     aisle_prior = rasterize_aisles(aisle_rectangles, semantic.shape)
     hard = np.isin(semantic, HARD_LABELS)
     candidate = np.isin(semantic, CANDIDATE_LABELS)
-    free = (semantic == 1) | aisle_prior
+    free = semantic == 1
+    if promote_aisle_prior:
+        free |= aisle_prior
 
     base = np.full(semantic.shape, UNKNOWN_VALUE, dtype=np.uint8)
     base[free] = FREE_VALUE
@@ -160,7 +162,8 @@ def write_pgm(grid, path):
 
 def write_navigation_bundle(semantic_labels, aisle_rectangles, output_dir,
                             resolution=0.05, origin=(0.0, 0.0, 0.0),
-                            clearance_radii_m=(0.20, 0.25, 0.30, 0.35, 0.40, 0.50)):
+                            clearance_radii_m=(0.20, 0.25, 0.30, 0.35, 0.40, 0.50),
+                            promote_aisle_prior=True):
     """Build and persist the navigation-map-v2 artifact bundle."""
     import json
     from pathlib import Path
@@ -170,7 +173,11 @@ def write_navigation_bundle(semantic_labels, aisle_rectangles, output_dir,
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
 
-    layers = build_navigation_layers(semantic_labels, aisle_rectangles)
+    layers = build_navigation_layers(
+        semantic_labels,
+        aisle_rectangles,
+        promote_aisle_prior=promote_aisle_prior,
+    )
     map_yaml = build_map_yaml('navigation_base_map.pgm', resolution, origin)
     validation = validate_navigation_map(
         layers.base_map,
