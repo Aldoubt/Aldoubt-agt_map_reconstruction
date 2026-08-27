@@ -15,7 +15,8 @@ def build_parser():
     parser = argparse.ArgumentParser(
         description=(
             "Use inferred lattice geometry only to choose target ridge bands; "
-            "3D structural evidence comes from low/q90 height and point-count grids."
+            "3D structural evidence comes from aisle-relative low-height relief and "
+            "q90-low vertical-extent contrast."
         )
     )
     parser.add_argument("--structural-bundle", required=True)
@@ -26,7 +27,15 @@ def build_parser():
     parser.add_argument("--min-points-per-cell", type=int, default=3)
     parser.add_argument("--aisle-reference-half-width-m", type=float, default=0.20)
     parser.add_argument("--min-topographic-relief-m", type=float, default=0.08)
-    parser.add_argument("--min-vertical-extent-m", type=float, default=0.15)
+    parser.add_argument(
+        "--min-vertical-extent-m",
+        type=float,
+        default=0.15,
+        help=(
+            "minimum ridge-minus-adjacent-aisle q90-low vertical extent contrast; "
+            "argument name retained for compatibility"
+        ),
+    )
     parser.add_argument("--min-support-fraction", type=float, default=0.40)
     parser.add_argument("--min-persistence-m", type=float, default=1.00)
     parser.add_argument("--max-internal-gap-m", type=float, default=0.20)
@@ -142,10 +151,10 @@ def main():
             cv2.circle(image, (x, y), 5, color, -1, lineType=cv2.LINE_AA)
 
     display = np.flipud(image).copy()
-    cv2.rectangle(display, (8, 8), (590, 92), (30, 30, 30), -1)
+    cv2.rectangle(display, (8, 8), (640, 92), (30, 30, 30), -1)
     legend = [
-        ("green: inferred-adjacent ridge with sustained 3D structural support", (0, 200, 0)),
-        ("red: inferred-adjacent ridge still lacks sustained 3D structure", (0, 0, 255)),
+        ("green: inferred-adjacent ridge with sustained aisle-relative 3D structure", (0, 200, 0)),
+        ("red: inferred-adjacent ridge still lacks sustained aisle-relative 3D structure", (0, 0, 255)),
         ("lattice geometry selects targets only; it never supplies 3D evidence", (255, 220, 0)),
     ]
     for index, (text, color) in enumerate(legend):
@@ -162,7 +171,7 @@ def main():
     cv2.imwrite(str(output / "inferred_lattice_3d_structure.png"), display)
 
     print("output:", output)
-    print("method: targeted_inferred_lattice_3d_structural_audit")
+    print("method:", result["method"])
     print("target_ridges:", result["target_ridge_count"])
     print("supported_target_ridges:", result["supported_target_ridge_count"])
     print("unsupported_target_ridges:", result["unsupported_target_ridge_count"])
@@ -172,9 +181,10 @@ def main():
             f"{item['ridge_id']}: status={item['status']} "
             f"supported_bins={summary['supported_bin_count']} "
             f"topographic_bins={summary['topographic_supported_bin_count']} "
-            f"vertical_bins={summary['vertical_supported_bin_count']} "
+            f"vertical_contrast_bins={summary['vertical_supported_bin_count']} "
             f"valid_cells={summary['valid_cell_count']}"
         )
+    print("vertical_extent_cue_is_aisle_relative: true")
     print("inferred_slot_supplies_3d_evidence: false")
     print("automatic_parameter_selection: false")
     print("automatic_acceptance: false")
