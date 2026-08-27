@@ -41,6 +41,7 @@ def _fmt(value):
 def _side_summary(side):
     strict = side["strict"].get("best_component")
     relaxed = side["relaxed_unknown_allowed"].get("best_component")
+    gap = side.get("evidence_gap") or {}
     return {
         "strict_coverage": None if strict is None else strict["cross_row_coverage_fraction"],
         "strict_endpoint_median_m": None if strict is None else strict["endpoint_distance_median_m"],
@@ -49,6 +50,10 @@ def _side_summary(side):
         "relaxed_endpoint_median_m": None if relaxed is None else relaxed["endpoint_distance_median_m"],
         "relaxed_depth_m": None if relaxed is None else relaxed["max_outward_depth_m"],
         "relaxed_unknown_fraction": None if relaxed is None else relaxed["unknown_cell_fraction"],
+        "coverage_gain": gap.get("coverage_gain"),
+        "endpoint_distance_reduction_m": gap.get("endpoint_distance_reduction_m"),
+        "outward_depth_gain_m": gap.get("outward_depth_gain_m"),
+        "relaxed_observed_fraction": gap.get("relaxed_observed_fraction"),
     }
 
 
@@ -57,6 +62,9 @@ def main():
 
     from agt_map_reconstruction.maps.headland_endpoint_envelope import (
         analyze_endpoint_side_envelopes,
+    )
+    from agt_map_reconstruction.maps.headland_evidence_gap import (
+        attach_endpoint_evidence_gaps,
     )
 
     map_path = Path(args.map).expanduser().resolve()
@@ -94,6 +102,7 @@ def main():
         resolution=resolution,
         radius_m=float(radius),
     )
+    attach_endpoint_evidence_gaps(result)
     result.update({
         "source_map": str(map_path),
         "source_row_band_regions": str(regions_path),
@@ -122,7 +131,11 @@ def main():
             f"relaxed_coverage={_fmt(summary['relaxed_coverage'])} "
             f"relaxed_endpoint_median_m={_fmt(summary['relaxed_endpoint_median_m'])} "
             f"relaxed_depth_m={_fmt(summary['relaxed_depth_m'])} "
-            f"relaxed_unknown_fraction={_fmt(summary['relaxed_unknown_fraction'])}"
+            f"relaxed_unknown_fraction={_fmt(summary['relaxed_unknown_fraction'])} "
+            f"coverage_gain={_fmt(summary['coverage_gain'])} "
+            f"endpoint_reduction_m={_fmt(summary['endpoint_distance_reduction_m'])} "
+            f"depth_gain_m={_fmt(summary['outward_depth_gain_m'])} "
+            f"relaxed_observed_fraction={_fmt(summary['relaxed_observed_fraction'])}"
         )
 
 
