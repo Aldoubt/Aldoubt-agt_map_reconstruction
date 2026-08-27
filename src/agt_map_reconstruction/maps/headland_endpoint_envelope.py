@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import numpy as np
 from scipy import ndimage
+from scipy.spatial import cKDTree
 
 from .navigation_export import FREE_VALUE, OCCUPIED_VALUE, UNKNOWN_VALUE
 
@@ -97,19 +98,17 @@ def _component_record(
     overlap = max(0.0, min(comp_v_max, row_v_max) - max(comp_v_min, row_v_min))
     row_span = max(1e-12, float(row_v_max) - float(row_v_min))
 
-    mask = np.zeros(base.shape, dtype=bool)
+    # Query only the small endpoint set instead of running a full-map EDT once
+    # per connected component. Geometry is in grid-cell units here.
+    tree = cKDTree(local_points)
+    endpoint_array = np.asarray(endpoint_points, dtype=float)
+    endpoint_distances_cells, _ = tree.query(endpoint_array, k=1)
+    endpoint_distances = (
+        np.asarray(endpoint_distances_cells, dtype=float) * float(resolution)
+    ).tolist()
+
     x = local_points[:, 0].astype(int)
     y = local_points[:, 1].astype(int)
-    mask[y, x] = True
-    distance_to_component = ndimage.distance_transform_edt(~mask) * float(resolution)
-    endpoint_distances = []
-    for point in endpoint_points:
-        px, py = np.rint(point).astype(int)
-        if 0 <= py < base.shape[0] and 0 <= px < base.shape[1]:
-            endpoint_distances.append(float(distance_to_component[py, px]))
-        else:
-            endpoint_distances.append(float("inf"))
-
     local_unknown = base[y, x] == UNKNOWN_VALUE
     finite_endpoint_distances = [d for d in endpoint_distances if np.isfinite(d)]
     return {
@@ -149,8 +148,9 @@ def _summarize_policy(
 ):
     labels, count = ndimage.label(safe & roi)
     records = []
+    labels_flat = labels.reshape(-1)
     for component_id in range(1, int(count) + 1):
-        component = labels[points_xy[:, 1].astype(int), points_xy[:, 0].astype(int)] == component_id
+        component = labels_flat == component_id
         if not np.any(component):
             continue
         record = _component_record(
