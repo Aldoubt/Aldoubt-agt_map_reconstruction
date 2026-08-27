@@ -38,7 +38,7 @@ def test_wide_band_is_split_into_inferred_lattice_slots_without_free_promotion()
 
     assert result["status"] == "ok"
     assert np.isclose(result["nominal_pitch_cells"], 10.0)
-    observed = [s for s in result["slots"] if s["source"] == "observed_row_aisle"]
+    observed = [s for s in result["slots"] if s["source"].startswith("observed")]
     inferred = [s for s in result["slots"] if s["source"] == "lattice_inferred_wide_band"]
     assert [round(s["center_v_cells"], 6) for s in observed] == [10.0, 20.0, 30.0, 40.0]
     assert [round(s["center_v_cells"], 6) for s in inferred] == [50.0, 60.0, 70.0]
@@ -64,7 +64,7 @@ def test_inference_is_refused_when_stable_observed_lattice_is_insufficient():
 
     assert result["status"] == "insufficient_observed_lattice"
     assert result["nominal_pitch_cells"] is None
-    assert all(s["source"] == "observed_row_aisle" for s in result["slots"])
+    assert all(s["source"].startswith("observed") for s in result["slots"])
     assert result["policy"]["automatic_acceptance"] is False
 
 
@@ -90,3 +90,59 @@ def test_inferred_slot_geometry_uses_nominal_aisle_width_and_parent_longitudinal
     assert np.isclose(np.ptp(polygon[:, 0]), 84.0)
     assert np.isclose(np.ptp(polygon[:, 1]), 4.0)
     assert slot["parent_region_class"] == "wide_open_area_candidate"
+
+
+def test_close_observed_fragments_share_one_lattice_slot_instead_of_shifting_phase():
+    regions = [
+        _region(1, 10.0, 4.0),
+        _region(2, 20.0, 4.0),
+        _region(3, 30.0, 4.0),
+        _region(4, 40.0, 3.0),
+        _region(5, 42.0, 3.0),
+        _region(6, 50.0, 4.0),
+        _region(7, 60.0, 4.0),
+        _region(8, 80.0, 30.0, region_class="wide_open_area_candidate"),
+    ]
+
+    result = complete_row_lattice(
+        regions,
+        resolution_m=0.10,
+        row_axis=[1.0, 0.0],
+        min_observed_slots=4,
+    )
+
+    assert result["status"] == "ok"
+    assert result["observed_band_count"] == 7
+    assert result["observed_slot_count"] == 6
+    assert result["duplicate_observed_band_count"] == 1
+    assert len(result["duplicate_observed_groups"]) == 1
+    group = result["duplicate_observed_groups"][0]
+    assert group["source_band_labels"] == ["A04", "A05"]
+    assert np.isclose(result["nominal_pitch_cells"], 10.0, atol=0.5)
+    assert result["fit_rmse_cells"] < 1.0
+    split_slots = [s for s in result["slots"] if s["source"] == "observed_split_group"]
+    assert len(split_slots) == 1
+    assert split_slots[0]["source_band_labels"] == ["A04", "A05"]
+    assert split_slots[0]["navigation_free_promoted"] is False
+
+
+def test_source_band_ids_are_provenance_not_lattice_indices():
+    regions = [
+        _region(10, 10.0, 4.0),
+        _region(20, 20.0, 4.0),
+        _region(30, 30.0, 4.0),
+        _region(40, 40.0, 4.0),
+        _region(50, 60.0, 30.0, region_class="wide_open_area_candidate"),
+    ]
+
+    result = complete_row_lattice(
+        regions,
+        resolution_m=0.10,
+        row_axis=[1.0, 0.0],
+        min_observed_slots=4,
+    )
+
+    observed = [s for s in result["slots"] if s["source"] == "observed_row_aisle"]
+    assert [s["lattice_index"] for s in observed] == [1, 2, 3, 4]
+    assert [s["source_band_id"] for s in observed] == [10, 20, 30, 40]
+    assert np.isclose(result["nominal_pitch_cells"], 10.0)
