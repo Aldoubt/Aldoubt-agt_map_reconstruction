@@ -45,37 +45,92 @@ def _boundary_source(point_xy, distance_hard, distance_unknown, resolution):
     return "hard" if dh < du else "unknown"
 
 
-def _interpolate_map_centerline(aisle, t):
-    map_line = aisle.get("centerline_map_xy_m")
-    if map_line is None:
+def _map_point(metadata, point_xy):
+    if metadata is None:
         return None
-    points = np.asarray(map_line, dtype=float)
-    if points.shape != (2, 2):
-        raise ValueError("centerline_map_xy_m must be 2x2 when present")
-    point = points[0] + float(t) * (points[1] - points[0])
-    return [float(point[0]), float(point[1])]
+    x, y = np.asarray(point_xy, dtype=float)
+    world = metadata.grid_to_world(float(x), float(y))
+    return [float(world[0]), float(world[1])]
+
+
+def _choose_boundary_cell(
+    selected_points,
+    selected_t,
+    full_start,
+    vector,
+    direction,
+    normal,
+    distance_to_nonfree,
+    resolution,
+    side,
+):
+    """Choose a real safe cell near one longitudinal component boundary.
+
+    The longitudinal extremum defines the boundary station. Within one grid-cell
+    longitudinal tolerance, prefer the cell with the largest clearance and then
+    the smallest absolute cross-track offset. This avoids projecting a component
+    boundary back onto an unsafe geometric centreline.
+    """
+    if side not in {"entry", "exit"}:
+        raise ValueError("side must be entry or exit")
+
+    extremum = float(np.min(selected_t) if side == "entry" else np.max(selected_t))
+    length_cells = float(np.linalg.norm(vector))
+    longitudinal_tolerance = 1.0 / max(length_cells, 1.0) + 1e-12
+    if side == "entry":
+        candidates = selected_t <= extremum + longitudinal_tolerance
+    else:
+        candidates = selected_t >= extremum - longitudinal_tolerance
+
+    candidate_points = selected_points[candidates]
+    candidate_t = selected_t[candidates]
+    if candidate_points.size == 0:
+        raise RuntimeError("selected component boundary has no candidate cells")
+
+    projected = full_start + candidate_t[:, None] * vector
+    cross_track_cells = (candidate_points - projected) @ normal
+    cross_track_m = cross_track_cells * float(resolution)
+
+    cx = np.rint(candidate_points[:, 0]).astype(int)
+    cy = np.rint(candidate_points[:, 1]).astype(int)
+    clearance = distance_to_nonfree[cy, cx]
+
+    # Lexicographic objective: maximize clearance, then stay closest to the
+    # centreline, then use the most extreme longitudinal station.
+    if side == "entry":
+        longitudinal_tie = candidate_t
+    else:
+        longitudinal_tie = -candidate_t
+    order = np.lexsort((longitudinal_tie, np.abs(cross_track_m), -clearance))
+    index = int(order[0])
+    return {
+        "point": candidate_points[index],
+        "t": float(candidate_t[index]),
+        "cross_track_offset_m": float(cross_track_m[index]),
+        "clearance_m": float(clearance[index]),
+    }
 
 
 def _handoff_record(
     aisle,
-    t,
-    full_start,
-    vector,
+    boundary,
     length_m,
     distance_hard,
     distance_unknown,
     resolution,
+    metadata=None,
 ):
-    point = full_start + float(t) * vector
-    heading = float(
-        aisle.get("heading_rad", np.arctan2(vector[1], vector[0]))
-    )
+    point = np.asarray(boundary["point"], dtype=float)
+    t = float(boundary["t"])
+    heading = float(aisle.get("heading_rad", 0.0))
     return {
-        "s_over_l": float(t),
-        "s_m": float(t) * float(length_m),
+        "s_over_l": t,
+        "s_m": t * float(length_m),
         "grid_xy": [float(point[0]), float(point[1])],
-        "map_xy_m": _interpolate_map_centerline(aisle, t),
+        "map_xy_m": _map_point(metadata, point),
         "heading_rad": heading,
+        "cross_track_offset_m": float(boundary["cross_track_offset_m"]),
+        "clearance_m": float(boundary["clearance_m"]),
         "boundary_source": _boundary_source(
             point,
             distance_hard,
@@ -90,14 +145,19 @@ def estimate_aisle_handoff_boundary(
     aisle,
     resolution,
     radius_m=0.20,
+    metadata=None,
 ):
     """Estimate the clearance-safe row core and entry/exit handoff poses.
 
     The selected row core is the connected component of ``safe & aisle`` that
     contains the geometric aisle midpoint. If the midpoint is not safe, the
     component with the largest longitudinal span is used as an explicit
-    fallback. The component's longitudinal extrema define clearance-conditioned
-    handoff boundaries; no map cell is edited.
+    fallback. Handoff poses are actual cells on the selected safe component,
+    not projections onto the geometric centreline, so a laterally shifted safe
+    exit can be represented when the centreline probe is blocked.
+
+    No map cell is edited. ``metadata`` is optional; when supplied, exact
+    map-frame handoff coordinates are emitted through ``GridMetadata``.
     """
     base = np.asarray(base_map, dtype=np.uint8)
     if base.ndim != 2:
@@ -119,6 +179,8 @@ def estimate_aisle_handoff_boundary(
     length_cells = float(np.sqrt(norm2))
     if length_cells <= 1e-12:
         raise ValueError("aisle centerline length must be non-zero")
+    direction = vector / length_cells
+    normal = np.array([-direction[1], direction[0]], dtype=float)
     length_m = float(aisle.get("length_m", length_cells * float(resolution)))
 
     free = base == FREE_VALUE
@@ -178,34 +240,56 @@ def estimate_aisle_handoff_boundary(
         raise RuntimeError("safe components exist but none could be selected")
 
     selected = labels[yy, xx] == int(selected_label)
+    selected_points = points[selected]
     selected_t = t_all[selected]
     if selected_t.size == 0:
         raise RuntimeError("selected safe component has no aisle cells")
 
-    start_t = float(np.clip(np.min(selected_t), 0.0, 1.0))
-    end_t = float(np.clip(np.max(selected_t), 0.0, 1.0))
+    entry_boundary = _choose_boundary_cell(
+        selected_points,
+        selected_t,
+        full_start,
+        vector,
+        direction,
+        normal,
+        distance_to_nonfree,
+        resolution,
+        side="entry",
+    )
+    exit_boundary = _choose_boundary_cell(
+        selected_points,
+        selected_t,
+        full_start,
+        vector,
+        direction,
+        normal,
+        distance_to_nonfree,
+        resolution,
+        side="exit",
+    )
+    start_t = float(np.clip(entry_boundary["t"], 0.0, 1.0))
+    end_t = float(np.clip(exit_boundary["t"], 0.0, 1.0))
     if end_t < start_t:
+        entry_boundary, exit_boundary = exit_boundary, entry_boundary
         start_t, end_t = end_t, start_t
 
     entry = _handoff_record(
         aisle,
-        start_t,
-        full_start,
-        vector,
+        entry_boundary,
         length_m,
         distance_hard,
         distance_unknown,
         resolution,
+        metadata=metadata,
     )
     exit_ = _handoff_record(
         aisle,
-        end_t,
-        full_start,
-        vector,
+        exit_boundary,
         length_m,
         distance_hard,
         distance_unknown,
         resolution,
+        metadata=metadata,
     )
 
     return {
