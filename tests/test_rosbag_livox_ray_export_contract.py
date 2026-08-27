@@ -6,7 +6,7 @@ import sys
 import pytest
 import yaml
 
-from agt_map_reconstruction.io.rosbag_livox_ray_export import (
+from agt_map_reconstruction.io.rosbag_livox_ray_contract import (
     resolve_benchmark_ray_export_contract,
 )
 
@@ -56,11 +56,12 @@ def _fixture(tmp_path):
         "run_id": "samebag_v1_full_20260817_162851",
         "dataset": {"bag_dir": str(raw)},
         "calibration": {
-            "rotation_lidar_to_imu_row_major": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0],
+            "rotation_lidar_to_imu_row_major": [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 1.0],
             "translation_lidar_to_imu_m": [0.011, 0.02329, -0.04412],
         },
         "algorithms": {
             "fast_livo2": {
+                "extrinsic_convention": "LIDAR_TO_IMU",
                 "topics": {"outputs": {"trajectory": "/aft_mapped_to_init"}},
                 "trajectory_contract": {
                     "pose_semantics": "T_PARENT_TRACKED",
@@ -81,7 +82,15 @@ def _fixture(tmp_path):
                             "scan_line": 4,
                             "blind": 0.5,
                             "point_filter_num": 1,
-                        }
+                        },
+                        "extrin_calib": {
+                            "extrinsic_R": [
+                                1.0, 0.0, 0.0,
+                                0.0, 1.0, 0.0,
+                                0.0, 0.0, 1.0,
+                            ],
+                            "extrinsic_T": [0.011, 0.02329, -0.04412],
+                        },
                     }
                 }
             }
@@ -105,8 +114,34 @@ def test_contract_selects_unique_raw_livox_and_full_bag_odometry(tmp_path):
     assert contract["trajectory"]["message_count"] == 6215
     assert contract["preprocess"]["scan_line_count"] == 4
     assert contract["preprocess"]["blind_range_m"] == pytest.approx(0.5)
+    assert contract["extrinsic"]["source"] == "benchmark_manifest"
     assert contract["platform_self_filter_reproduced"] is False
     assert contract["semantic_promotion"] is False
+
+
+def test_contract_uses_explicit_fast_livo_config_when_manifest_has_no_calibration(tmp_path):
+    raw, run, config = _fixture(tmp_path)
+    manifest_path = run / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest.pop("calibration")
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+
+    contract = resolve_benchmark_ray_export_contract(
+        run,
+        fast_livo_config=config,
+    )
+
+    assert contract["lidar"]["bag"] == str(raw.resolve())
+    assert contract["extrinsic"]["source"] == str(config.resolve())
+    assert contract["extrinsic"]["source_field"] == "ros__parameters.extrin_calib"
+    assert contract["extrinsic"]["rotation_lidar_to_imu_row_major"] == [
+        1.0, 0.0, 0.0,
+        0.0, 1.0, 0.0,
+        0.0, 0.0, 1.0,
+    ]
+    assert contract["extrinsic"]["translation_lidar_to_imu_m"] == pytest.approx(
+        [0.011, 0.02329, -0.04412]
+    )
 
 
 def test_contract_rejects_different_lidar_bag_than_frozen_run(tmp_path):
