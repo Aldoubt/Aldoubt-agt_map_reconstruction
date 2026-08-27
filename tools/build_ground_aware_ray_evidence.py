@@ -13,12 +13,19 @@ import numpy as np
 def build_parser():
     parser = argparse.ArgumentParser(
         description=(
-            "Accumulate low-height line-of-sight support above a frozen ground "
-            "surface. The output is diagnostic evidence only and does not edit PGM."
+            "Accumulate low-height line-of-sight support above an explicit ground "
+            "reference. The output is diagnostic evidence only and does not edit PGM."
         )
     )
     parser.add_argument("--rays", required=True, help="schema-v1 observation_rays.npz")
-    parser.add_argument("--ground-surface", required=True, help="ground_surface.npy")
+    parser.add_argument(
+        "--ground-reference",
+        required=True,
+        help=(
+            "geometry-only ground_reference.npy, typically produced by "
+            "fit_ground_reference_plane.py; this is not semantic free evidence"
+        ),
+    )
     parser.add_argument("--grid-manifest", required=True, help="JSON containing grid metadata")
     parser.add_argument("--output", required=True)
     parser.add_argument("--min-ground-relative-height-m", type=float, required=True)
@@ -61,7 +68,7 @@ def main():
     )
 
     ray_path = Path(args.rays).expanduser().resolve()
-    ground_path = Path(args.ground_surface).expanduser().resolve()
+    ground_path = Path(args.ground_reference).expanduser().resolve()
     manifest_path = Path(args.grid_manifest).expanduser().resolve()
     output = Path(args.output).expanduser().resolve()
     if output.exists() and any(output.iterdir()):
@@ -71,7 +78,7 @@ def main():
     grid_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
     metadata = _metadata_from_payload(grid_payload)
     bundle = load_observation_ray_bundle(ray_path, expected_frame_id=metadata.frame_id)
-    ground_surface = np.load(ground_path, allow_pickle=False)
+    ground_reference = np.load(ground_path, allow_pickle=False)
     config = GroundAwareRayConfig(
         min_ground_relative_height_m=args.min_ground_relative_height_m,
         max_ground_relative_height_m=args.max_ground_relative_height_m,
@@ -81,7 +88,7 @@ def main():
     )
     result = accumulate_ground_aware_ray_support(
         bundle,
-        ground_surface,
+        ground_reference,
         metadata,
         config,
     )
@@ -95,7 +102,7 @@ def main():
         "schema_version": 1,
         "grid": metadata.to_dict(),
         "source_rays": str(ray_path),
-        "source_ground_surface": str(ground_path),
+        "source_ground_reference": str(ground_path),
         "source_grid_manifest": str(manifest_path),
         "ray_policy": {
             "min_ground_relative_height_m": float(config.min_ground_relative_height_m),
@@ -107,6 +114,7 @@ def main():
             ),
             "hit_cell_is_free": False,
             "requires_finite_ground_reference": True,
+            "ground_reference_is_semantic_evidence": False,
             "semantic_promotion": False,
         },
         "summary": result["summary"],
