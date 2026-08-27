@@ -59,7 +59,6 @@ def _predict_local_affine(
         delta = neighbor_xy - targets[:, None, :]
         x = delta[:, :, 0]
         y = delta[:, :, 1]
-        one = np.ones_like(x)
 
         normal = np.empty((targets.shape[0], 3, 3), dtype=np.float64)
         normal[:, 0, 0] = np.sum(x * x, axis=1)
@@ -78,7 +77,13 @@ def _predict_local_affine(
         rank = np.linalg.matrix_rank(normal)
         local_valid = rank == 3
         if np.any(local_valid):
-            coeff = np.linalg.solve(normal[local_valid], rhs[local_valid])
+            # numpy.solve treats a stacked RHS of shape (B, 3) ambiguously as
+            # matrix-valued input. Keep an explicit singleton column and squeeze
+            # it after the batched solve.
+            coeff = np.linalg.solve(
+                normal[local_valid],
+                rhs[local_valid, :, None],
+            )[:, :, 0]
             local_prediction = np.full(targets.shape[0], np.nan, dtype=np.float64)
             # The coordinate system is centred at each target, so the intercept
             # is the predicted height at that target.
