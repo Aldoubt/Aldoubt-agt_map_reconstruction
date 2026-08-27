@@ -23,9 +23,22 @@ def _handoff(label, y, reverse=False):
         "label": label,
         "status": "ok",
         "width_clearance_eligible": True,
-        "entry_handoff": {"grid_xy": entry, "clearance_m": 0.2},
-        "exit_handoff": {"grid_xy": exit_, "clearance_m": 0.2},
+        "component_selection": "midpoint",
+        "entry_handoff": {
+            "grid_xy": entry,
+            "clearance_m": 0.2,
+            "boundary_nearest_source": "unknown",
+        },
+        "exit_handoff": {
+            "grid_xy": exit_,
+            "clearance_m": 0.2,
+            "boundary_nearest_source": "hard",
+        },
         "row_core_fraction": 0.7,
+        "entry_transition_length_m": 0.4,
+        "exit_transition_length_m": 0.5,
+        "entry_transition": {"dominant_source": "unknown", "blocked_cell_count": 12},
+        "exit_transition": {"dominant_source": "hard", "blocked_cell_count": 15},
     }
 
 
@@ -44,6 +57,24 @@ def test_audit_reports_clearance_handoffs_inward_from_raw_endpoints():
     assert np.isclose(result["raw_endpoint_fit"]["exit"]["intercept_u"], 40.0)
     assert np.isclose(result["clearance_handoff_fit"]["exit"]["intercept_u"], 35.0)
     assert result["policy"]["d3_geometry_modified"] is False
+
+
+def test_audit_preserves_handoff_selection_and_transition_provenance():
+    rows = [_row("A01", 10.0)]
+    handoffs = [_handoff("A01", 10.0)]
+
+    result = audit_endpoint_geometry(rows, handoffs, resolution_m=0.10)
+    record = result["rows"][0]
+
+    assert record["component_selection"] == "midpoint"
+    assert record["entry_transition_length_m"] == 0.4
+    assert record["exit_transition_length_m"] == 0.5
+    assert record["entry_boundary_nearest_source"] == "unknown"
+    assert record["exit_boundary_nearest_source"] == "hard"
+    assert record["entry_transition_dominant_source"] == "unknown"
+    assert record["exit_transition_dominant_source"] == "hard"
+    assert record["entry_transition_blocked_cell_count"] == 12
+    assert record["exit_transition_blocked_cell_count"] == 15
 
 
 def test_audit_normalizes_reversed_source_row_and_handoff_orientation():
