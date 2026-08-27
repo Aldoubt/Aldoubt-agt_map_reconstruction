@@ -15,7 +15,7 @@ OCCUPIED_VALUE = np.uint8(0)
 UNKNOWN_VALUE = np.uint8(205)
 FREE_VALUE = np.uint8(254)
 
-HARD_LABELS = (2, 4, 6)  # ridge, wall, pillar
+HARD_LABELS = (2, 4, 6, 7)  # ridge, wall, pillar, confirmed occupied
 CANDIDATE_LABELS = (3, 5)  # obstacle candidate, step candidate
 PILLAR_LABELS = (6,)
 
@@ -51,8 +51,8 @@ def build_navigation_layers(semantic_labels, aisle_rectangles):
 
     base = np.full(semantic.shape, UNKNOWN_VALUE, dtype=np.uint8)
     base[free] = FREE_VALUE
-    # Structural geometry has the highest priority. Pillars are static
-    # collision geometry and must never be promoted to free by the aisle prior.
+    # Structural geometry and confirmed occupied evidence have the highest
+    # priority and must never be promoted to free by the aisle prior.
     base[hard] = OCCUPIED_VALUE
 
     return NavigationLayers(
