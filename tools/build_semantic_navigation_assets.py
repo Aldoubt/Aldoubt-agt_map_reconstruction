@@ -30,6 +30,14 @@ def build_parser():
     parser.add_argument("--max-ground-step-m", type=float, default=0.20)
     parser.add_argument("--max-interpolation-gap-m", type=float, default=0.25)
     parser.add_argument("--obstacle-height-m", type=float, default=0.15)
+    parser.add_argument(
+        "--use-q90-for-obstacles",
+        action="store_true",
+        help=(
+            "Diagnostic only: classify obstacles from q90 height instead of the "
+            "default low-envelope height. This is usually too aggressive in vegetation."
+        ),
+    )
 
     parser.add_argument(
         "--row-direction",
@@ -87,6 +95,7 @@ def main():
         min_width_m=args.min_aisle_width_m,
         min_length_m=args.min_aisle_length_m,
         include_interpolated=not args.confirmed_free_only,
+        use_q90_for_obstacles=args.use_q90_for_obstacles,
     )
 
     output = Path(args.output)
