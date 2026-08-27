@@ -57,7 +57,7 @@ def _bundle():
     }
 
 
-def _audit(bundle, low, q90, count):
+def _audit(bundle, low, q90, count, *, min_structural_span_fraction=0.50):
     return audit_inferred_lattice_3d_structure(
         bundle,
         low,
@@ -70,6 +70,7 @@ def _audit(bundle, low, q90, count):
         min_support_fraction=0.40,
         min_persistence_m=1.00,
         max_internal_gap_m=0.20,
+        min_structural_span_fraction=min_structural_span_fraction,
     )
 
 
@@ -145,3 +146,28 @@ def test_vertical_extent_contrast_can_support_inferred_ridge():
         )
         for item in result["ridge_audits"]
     )
+
+
+def test_short_internal_3d_patch_is_not_promoted_to_full_ridge_endpoint_support():
+    bundle = _bundle()
+    low = np.zeros((30, 40), dtype=np.float64)
+    q90 = np.zeros_like(low)
+    count = np.full(low.shape, 5, dtype=np.int32)
+
+    # Only a short interior patch is structurally elevated. It is long enough
+    # to satisfy the 1 m persistence check, but far too short to support both
+    # endpoints of the full ridge profile.
+    low[7:13, 13:27] = 0.12
+    q90[7:13, 13:27] = 0.12
+    low[17:23, 13:27] = 0.12
+    q90[17:23, 13:27] = 0.12
+
+    result = _audit(bundle, low, q90, count, min_structural_span_fraction=0.50)
+
+    assert result["supported_target_ridge_count"] == 0
+    for item in result["ridge_audits"]:
+        assert item["status"] == "insufficient_longitudinal_structural_span"
+        assert item["structural_span_fraction"] < 0.50
+        assert item["entry_grid_xy"] is not None
+        assert item["exit_grid_xy"] is not None
+        assert item["evidence_summary"]["supported_bin_count"] > 0
