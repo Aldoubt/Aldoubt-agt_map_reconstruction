@@ -58,10 +58,6 @@ def _label_at_midpoint(image, points, text, color):
     )
 
 
-def _save_display(path, grid_image):
-    cv2.imwrite(str(path), np.flipud(grid_image))
-
-
 def main():
     args = build_parser().parse_args()
 
@@ -123,7 +119,7 @@ def main():
         _draw_centerline(image, slot["centerline_xy"], color, thickness)
         _label_at_midpoint(image, slot["centerline_xy"], text, color)
 
-    # Legend in display coordinates: add after vertical flip so text is upright.
+    # Add legend after vertical flip so text remains upright.
     display = np.flipud(image).copy()
     cv2.rectangle(display, (8, 8), (370, 88), (30, 30, 30), -1)
     cv2.putText(display, "green: observed row aisle", (18, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 210, 0), 1, cv2.LINE_AA)
@@ -137,7 +133,9 @@ def main():
     parents = {}
     for slot in inferred:
         parent = slot.get("parent_region_label", "")
-        parents[parent] = parents.get(parent, 0) + 1
+        source = slot.get("source_band_label", "")
+        key = f"{parent}<{source}" if source else parent
+        parents[key] = parents.get(key, 0) + 1
 
     print("output:", output)
     print("status:", result["status"])
