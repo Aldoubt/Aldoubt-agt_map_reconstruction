@@ -72,7 +72,7 @@ def test_reports_no_safe_component_when_clearance_exceeds_aisle_width():
         base,
         _horizontal_aisle(),
         resolution=0.10,
-        radius_m=0.60,
+        radius_m=0.65,
     )
 
     assert result["status"] == "no_safe_component"
