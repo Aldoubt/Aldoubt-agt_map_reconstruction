@@ -27,11 +27,25 @@ def _ridge(index, v, entry_u, exit_u, *, status="ok"):
     }
 
 
+def _profile(index, v):
+    return {
+        "ridge_id": f"R{index}",
+        "ridge_cross_span_cells": [float(v - 1.0), float(v + 1.0)],
+    }
+
+
 def test_uncertainty_envelope_preserves_all_supported_ridge_terminations():
     bundle = {
         "row_axis_direction": [1.0, 0.0],
         "cross_row_direction": [0.0, 1.0],
         "resolution_m": 0.10,
+        "ridge_profiles": [
+            _profile(1, 0.0),
+            _profile(2, 10.0),
+            _profile(3, 20.0),
+            _profile(4, 30.0),
+            _profile(5, 40.0),
+        ],
         "ridge_terminations": [
             _ridge(1, 0.0, 10.0, 70.0),
             _ridge(2, 10.0, 11.0, 69.0),
@@ -53,6 +67,8 @@ def test_uncertainty_envelope_preserves_all_supported_ridge_terminations():
     assert len(result["exit"]["ridge_points"]) == 4
     assert result["entry"]["trend"]["method"] == "median_pairwise_slope_plus_median_intercept"
     assert result["entry"]["abs_residual_m"]["max"] > result["entry"]["abs_residual_m"]["p50"]
+    assert np.isclose(result["entry"]["cross_row_span_fraction"], 0.75)
+    assert np.isclose(result["exit"]["cross_row_span_fraction"], 0.75)
     assert result["policy"]["ridge_outliers_deleted"] is False
     assert result["policy"]["bilateral_agreement_required_for_envelope"] is False
     assert result["policy"]["semantic_promotion"] is False
@@ -63,6 +79,7 @@ def test_uncertainty_envelope_keeps_bilateral_disagreement_as_uncertainty_metada
         "row_axis_direction": [1.0, 0.0],
         "cross_row_direction": [0.0, 1.0],
         "resolution_m": 0.10,
+        "ridge_profiles": [_profile(1, 0.0), _profile(2, 10.0)],
         "ridge_terminations": [
             _ridge(1, 0.0, 10.0, 70.0),
             _ridge(2, 10.0, 11.0, 69.0),
