@@ -38,8 +38,11 @@ def test_exit_unknown_barrier_moves_handoff_before_raw_aisle_end():
     assert result["component_selection"] == "midpoint"
     assert result["entry_handoff"]["s_over_l"] < 0.05
     assert 0.65 < result["exit_handoff"]["s_over_l"] < 0.75
-    assert result["exit_handoff"]["boundary_source"] == "unknown"
+    assert result["exit_handoff"]["boundary_nearest_source"] == "unknown"
     assert result["exit_transition_length_m"] > 2.5
+    assert result["exit_transition"]["dominant_source"] == "unknown"
+    assert result["exit_transition"]["unknown_cell_count"] > 0
+    assert result["exit_transition"]["hard_cell_count"] == 0
     assert result["exit_handoff"]["clearance_m"] >= 0.20
 
 
@@ -56,8 +59,11 @@ def test_entry_hard_barrier_moves_entry_handoff_after_raw_aisle_start():
 
     assert result["status"] == "ok"
     assert 0.25 < result["entry_handoff"]["s_over_l"] < 0.35
-    assert result["entry_handoff"]["boundary_source"] == "hard"
+    assert result["entry_handoff"]["boundary_nearest_source"] == "hard"
     assert result["entry_transition_length_m"] > 2.5
+    assert result["entry_transition"]["dominant_source"] == "hard"
+    assert result["entry_transition"]["hard_cell_count"] > 0
+    assert result["entry_transition"]["unknown_cell_count"] == 0
     assert result["entry_handoff"]["clearance_m"] >= 0.20
     assert result["exit_handoff"]["s_over_l"] > 0.95
 
@@ -77,6 +83,7 @@ def test_exit_handoff_uses_safe_lateral_pose_when_centerline_is_blocked():
     assert result["exit_handoff"]["s_over_l"] > 0.95
     assert result["exit_handoff"]["clearance_m"] >= 0.20
     assert abs(result["exit_handoff"]["cross_track_offset_m"]) >= 0.10
+    assert result["exit_handoff"]["boundary_nearest_source"] == "unknown"
     x, y = np.rint(result["exit_handoff"]["grid_xy"]).astype(int)
     assert base[y, x] == FREE_VALUE
 
@@ -95,3 +102,5 @@ def test_reports_no_safe_component_when_clearance_exceeds_aisle_width():
     assert result["status"] == "no_safe_component"
     assert result["entry_handoff"] is None
     assert result["exit_handoff"] is None
+    assert result["entry_transition"] is None
+    assert result["exit_transition"] is None
