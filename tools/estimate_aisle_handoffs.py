@@ -41,6 +41,8 @@ def _read_grid_pgm(path):
 def _summary_row(item):
     entry = item.get("entry_handoff") or {}
     exit_ = item.get("exit_handoff") or {}
+    entry_transition = item.get("entry_transition") or {}
+    exit_transition = item.get("exit_transition") or {}
     return {
         "label": item.get("label"),
         "status": item.get("status"),
@@ -50,15 +52,19 @@ def _summary_row(item):
         "row_core_end_s_over_l": item.get("row_core_end_s_over_l"),
         "row_core_length_m": item.get("row_core_length_m"),
         "entry_transition_length_m": item.get("entry_transition_length_m"),
+        "entry_transition_dominant_source": entry_transition.get("dominant_source"),
+        "entry_transition_blocked_cell_count": entry_transition.get("blocked_cell_count"),
         "exit_transition_length_m": item.get("exit_transition_length_m"),
+        "exit_transition_dominant_source": exit_transition.get("dominant_source"),
+        "exit_transition_blocked_cell_count": exit_transition.get("blocked_cell_count"),
         "entry_handoff_s_over_l": entry.get("s_over_l"),
         "entry_cross_track_offset_m": entry.get("cross_track_offset_m"),
         "entry_clearance_m": entry.get("clearance_m"),
-        "entry_boundary_source": entry.get("boundary_source"),
+        "entry_boundary_nearest_source": entry.get("boundary_nearest_source"),
         "exit_handoff_s_over_l": exit_.get("s_over_l"),
         "exit_cross_track_offset_m": exit_.get("cross_track_offset_m"),
         "exit_clearance_m": exit_.get("clearance_m"),
-        "exit_boundary_source": exit_.get("boundary_source"),
+        "exit_boundary_nearest_source": exit_.get("boundary_nearest_source"),
     }
 
 
@@ -124,7 +130,7 @@ def main():
     ]
 
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "source_map": str(map_path),
         "source_aisles": str(aisle_path),
         "grid": metadata.to_dict(),
@@ -138,6 +144,13 @@ def main():
             "handoff_pose": (
                 "actual safe component boundary cell; maximize clearance then "
                 "minimize absolute cross-track offset"
+            ),
+            "boundary_source_semantics": (
+                "nearest source at the selected safe boundary cell only"
+            ),
+            "transition_source_semantics": (
+                "dominant nearest source over clearance-blocked cells in the "
+                "entry/exit transition zone"
             ),
             "map_editing": False,
         },
@@ -162,15 +175,19 @@ def main():
         "row_core_end_s_over_l",
         "row_core_length_m",
         "entry_transition_length_m",
+        "entry_transition_dominant_source",
+        "entry_transition_blocked_cell_count",
         "exit_transition_length_m",
+        "exit_transition_dominant_source",
+        "exit_transition_blocked_cell_count",
         "entry_handoff_s_over_l",
         "entry_cross_track_offset_m",
         "entry_clearance_m",
-        "entry_boundary_source",
+        "entry_boundary_nearest_source",
         "exit_handoff_s_over_l",
         "exit_cross_track_offset_m",
         "exit_clearance_m",
-        "exit_boundary_source",
+        "exit_boundary_nearest_source",
     ]
     with (output / "aisle_handoffs.csv").open(
         "w", newline="", encoding="utf-8"
@@ -191,6 +208,8 @@ def main():
             continue
         entry = item["entry_handoff"]
         exit_ = item["exit_handoff"]
+        entry_transition = item["entry_transition"]
+        exit_transition = item["exit_transition"]
         print(
             f"{item['label']}: core={item['row_core_start_s_over_l']:.3f}.."
             f"{item['row_core_end_s_over_l']:.3f} "
@@ -198,8 +217,10 @@ def main():
             f"exit_transition_m={item['exit_transition_length_m']:.2f} "
             f"entry_offset_m={entry['cross_track_offset_m']:.2f} "
             f"exit_offset_m={exit_['cross_track_offset_m']:.2f} "
-            f"entry_source={entry['boundary_source']} "
-            f"exit_source={exit_['boundary_source']}"
+            f"entry_boundary_source={entry['boundary_nearest_source']} "
+            f"exit_boundary_source={exit_['boundary_nearest_source']} "
+            f"entry_transition_source={entry_transition['dominant_source']} "
+            f"exit_transition_source={exit_transition['dominant_source']}"
         )
 
 
