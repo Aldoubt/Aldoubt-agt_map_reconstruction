@@ -39,11 +39,12 @@ def write_semantic_navigation_assets(
     include_interpolated=True,
     navigation_clearance_radii_m=(0.20, 0.25, 0.30, 0.35, 0.40, 0.50),
 ):
-    """Write current EXP003 inputs plus a Nav2 static-map bundle.
+    """Write current EXP003 inputs plus a conservative Nav2 static-map bundle.
 
     Confirmed occupied evidence is retained as a hard semantic label even when
-    the recovered aisle prior overlaps it. Interpolated ground may support the
-    geometry recovery but is never directly promoted to semantic free.
+    the recovered aisle geometry overlaps it. Interpolated ground may support
+    aisle geometry recovery, but the evidence-derived Nav2 map does not let the
+    aisle prior promote unknown/interpolated cells to static free.
     """
     evidence = np.asarray(evidence, dtype=np.uint8)
     expected_shape = (int(metadata.height), int(metadata.width))
@@ -100,6 +101,7 @@ def write_semantic_navigation_assets(
             ),
             "min_width_m": float(min_width_m),
             "min_length_m": float(min_length_m),
+            "promote_aisle_prior_to_static_free": False,
         },
         "evidence_counts": evidence_counts,
         "label_counts": {
@@ -122,6 +124,7 @@ def write_semantic_navigation_assets(
         resolution=metadata.resolution,
         origin=(metadata.origin_x, metadata.origin_y, metadata.origin_yaw),
         clearance_radii_m=navigation_clearance_radii_m,
+        promote_aisle_prior=False,
     )
     return {
         "semantic_labels": labels,
