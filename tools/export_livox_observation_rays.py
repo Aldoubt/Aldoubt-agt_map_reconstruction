@@ -43,9 +43,11 @@ def build_parser():
 def main():
     args = build_parser().parse_args()
 
+    from agt_map_reconstruction.io.rosbag_livox_ray_contract import (
+        resolve_benchmark_ray_export_contract,
+    )
     from agt_map_reconstruction.io.rosbag_livox_ray_export import (
         export_livox_observation_rays,
-        resolve_benchmark_ray_export_contract,
     )
     from agt_map_reconstruction.maps.observation_ray_bundle import (
         write_observation_ray_bundle,
@@ -130,6 +132,8 @@ def main():
     print("trajectory_bag:", contract["trajectory"]["bag"])
     print("trajectory_topic:", contract["trajectory"]["topic"])
     print("trajectory_metadata_poses:", contract["trajectory"]["message_count"])
+    print("extrinsic_source:", contract["extrinsic"]["source"])
+    print("extrinsic_source_field:", contract["extrinsic"]["source_field"])
     print("trajectory_parent_frame:", summary["trajectory_parent_frame"])
     print("trajectory_child_frame:", summary["trajectory_child_frame"])
     print("output_frame_id:", bundle.frame_id)
