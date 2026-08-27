@@ -15,6 +15,7 @@ def test_rebuild_semantic_cli_reuses_existing_evidence_without_pcd(tmp_path):
     evidence[44:52, 5:75] = EvidenceClass.FREE_CONFIRMED
     evidence[18:21, 5:75] = EvidenceClass.OCCUPIED_CONFIRMED
     evidence[36:39, 5:75] = EvidenceClass.OCCUPIED_CONFIRMED
+    evidence[10, 40] = EvidenceClass.OCCUPIED_CONFIRMED
 
     evidence_path = tmp_path / "evidence.npy"
     np.save(evidence_path, evidence)
@@ -48,6 +49,7 @@ def test_rebuild_semantic_cli_reuses_existing_evidence_without_pcd(tmp_path):
             "--manifest", str(manifest_path),
             "--output", str(output),
             "--row-direction", "1", "0",
+            "--occupied-aisle-conflicts", "candidate",
         ],
         text=True,
         capture_output=True,
@@ -58,5 +60,7 @@ def test_rebuild_semantic_cli_reuses_existing_evidence_without_pcd(tmp_path):
     assert rebuilt["grid"] == source_manifest["grid"]
     assert rebuilt["row_direction"] == [1.0, 0.0]
     assert rebuilt["aisle_count"] == 3
+    assert rebuilt["geometry_policy"]["occupied_aisle_conflict_policy"] == "candidate"
+    assert rebuilt["aisle_conflict_candidate_count"] == 1
     assert (output / "navigation" / "navigation_base_map.yaml").is_file()
     assert (output / "rebuild_manifest.json").is_file()
