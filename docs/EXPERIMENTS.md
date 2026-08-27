@@ -512,7 +512,7 @@ endpoint_trim_m     = 0.00
 allow_unknown       = false
 ```
 
-The dynamic-programming score rewards blocked-space clearance and penalizes absolute lateral displacement, offset change, a second-difference curvature proxy, and advisory candidate overlap. The transition checker uses the continuously swept convex polygon footprint so an obstacle cannot be skipped between 0.10 m samples.
+The dynamic-programming score rewards blocked-space clearance and penalizes lateral displacement, offset change, curvature proxy, and advisory candidate overlap. The transition checker uses the continuously swept convex polygon footprint so an obstacle cannot be skipped between 0.10 m samples.
 
 No Ackermann steering-angle or minimum-turning-radius constraint is applied in B2. `max_offset_change_m` limits geometric smoothness only; vehicle kinematics remain a later stage.
 
@@ -621,3 +621,179 @@ Next stage: EXP004-C Headland Handoff & Ackermann Transition
 4. use measured wheelbase / steering geometry from robot configuration for minimum-turning-radius constraints rather than inventing values;
 5. separate failure reasons into map collision, unknown overlap, insufficient headland depth, and kinematic infeasibility;
 6. only after this offline handoff test is stable, move to Nav2/runtime integration.
+
+---
+
+## P1 Evidence-driven Greenhouse Semantic Reconstruction
+
+Status: P1-A and P1-B replay-validated on 2026-08-27; P1-C row-core geometry replay-validated with schema-v1 handoff assets; schema-v2 transition-cause replay pending.
+
+Goal:
+
+Reconstruct a conservative, interpretable semantic navigation asset directly from the `greenhouse_01` LIO-only PCD-derived evidence while keeping unknown, hard occupied evidence, row-aisle priors, and open-area candidates explicit.
+
+Reference grid and row axis:
+
+- grid: 912 x 797
+- resolution: 0.05 m/cell
+- row direction: `[0.9626245859468401, 0.27083926327376306]`
+- row angle: approximately 15.72 deg
+
+### P1-A Evidence, row-axis correction, and row/open-area separation
+
+Measured reconstruction chain:
+
+```text
+q90 obstacle regression
+0 aisles
+    |
+    v
+low-envelope evidence
+8 aisles with ~90 degree row-axis ambiguity
+    |
+    v
+occupied-banding row-axis resolver
+20 raw row-aligned bands
+    |
+    v
+width-distribution semantic separation
+17 row aisles + 3 wide open-area candidates
+```
+
+Evidence counts remained invariant through downstream rebuilds:
+
+```text
+unknown:              264863
+free_confirmed:       270877
+occupied_confirmed:   191117
+ground_interpolated:       7
+```
+
+The explicit aisle-conflict candidate policy is diagnostic and opt-in. After row/open-area separation:
+
+```text
+aisle_conflict_candidates: 31331
+hard occupied cells:        159786
+static free cells:          302208
+unknown cells:              264870
+hard-as-free cells:              0
+```
+
+The wide-band classifier uses `Q3 + 1.5 * IQR`. For the 20 recovered bands the width-outlier threshold is 1.2875 m, which moves the former A18/A19/A20 bands into three `wide_open_area_candidate` regions. They are not labelled as headland because width alone does not establish headland topology.
+
+Measured row-aisle clearance after the 17 + 3 separation:
+
+| clearance radius | equivalent diameter | row-aisle connectivity |
+| ---: | ---: | ---: |
+| 0.20 m | 0.40 m | 12 / 17 |
+| 0.25 m | 0.50 m | 10 / 17 |
+| 0.30 m | 0.60 m | 8 / 17 |
+| 0.35 m | 0.70 m | 6 / 17 |
+| 0.40 m | 0.80 m | 2 / 17 |
+| 0.50 m | 1.00 m | 0 / 17 |
+
+Geometry diagnostics at the minimum radii:
+
+```text
+minimum_width_limited:          A01 A07
+minimum_connectivity_limited:   A03 A12 A14
+unexpected_connectivity:        A03 A10 A12 A14
+wide_width_outliers:            none after region split
+```
+
+Conclusion:
+
+The 20-band result must not be used as an aisle denominator. Separating three unusually wide regions restores a 17-row-aisle denominator and prevents open-area evidence from receiving the aisle-conditioned occupied-to-candidate relaxation.
+
+### P1-B Local blocker localization
+
+Goal:
+
+Determine whether the four geometrically unexpected clearance failures are caused by row-interior hard obstacles, unknown coverage gaps, or entry/exit handoff geometry.
+
+Measured localization:
+
+| aisle | radius | region | source | mode | key measurement |
+| --- | ---: | --- | --- | --- | --- |
+| A03 | 0.20 m | exit | unknown | longitudinal_gap | first blocker s/L 0.807-0.817; longest 0.65 m |
+| A10 | 0.25 m | exit | unknown | exit_probe_blocked | exit probe unsafe; no full longitudinal blocker segment |
+| A12 | 0.20 m | exit | unknown | longitudinal_gap | first blocker s/L 0.828-0.838; longest 0.30 m |
+| A14 | 0.20 m | exit | unknown | exit_probe_blocked | first blocker s/L 0.849-0.864; longest 0.45 m |
+
+All four unexpected failures therefore localize to the exit side and are dominated by unknown evidence. No row-interior hard blocker was identified in this set.
+
+Conclusion:
+
+The next bottleneck is the explicit row-core / transition-zone / open-area handoff, not another static-PGM morphology pass and not a more complicated in-aisle route search.
+
+### P1-C Clearance-conditioned row-core handoff geometry
+
+Goal:
+
+Replace fixed endpoint trimming with a data-derived safe row core. At each clearance radius the selected core is the connected component of `safe & aisle` that contains the aisle midpoint; if the midpoint is not safe, the largest longitudinal-span component is retained as an explicit fallback. Entry and exit handoff poses are chosen from real safe cells on the selected component, not projected onto an unsafe geometric centreline.
+
+Measured schema-v1 replay at `radius = 0.20 m`:
+
+```text
+aisles: 17
+safe-component status ok: 17
+no_safe_component: 0
+largest-span fallback: 1
+```
+
+Important row-core geometry:
+
+| aisle | core s/L | core fraction | entry transition | exit transition | interpretation |
+| --- | --- | ---: | ---: | ---: | --- |
+| A01 | 0.494-0.510 | 0.016 | 14.83 m | 14.72 m | width-limited safe fragment |
+| A07 | 0.436-0.816 | 0.380 | 13.03 m | 5.49 m | width-limited fragmented core |
+| A03 | 0.006-0.804 | 0.798 | 0.18 m | 5.85 m | exit-truncated core |
+| A12 | 0.007-0.827 | 0.820 | 0.20 m | 5.19 m | exit-truncated core |
+| A14 | 0.007-0.847 | 0.840 | 0.20 m | 4.60 m | exit-truncated core |
+| A10 | 0.012-0.993 | 0.981 | 0.37 m | 0.20 m | near-full core at 0.20 m |
+
+Measured schema-v1 replay at `radius = 0.25 m`:
+
+```text
+aisles: 17
+safe-component status ok: 17
+no_safe_component: 0
+largest-span fallback: 3
+```
+
+Important sensitivity cases:
+
+| aisle | core s/L | core fraction | entry transition | exit transition | interpretation |
+| --- | --- | ---: | ---: | ---: | --- |
+| A01 | 0.890-0.991 | 0.101 | 26.72 m | 0.27 m | width-limited fragment |
+| A06 | 0.481-0.500 | 0.019 | 14.37 m | 14.94 m | becomes width-limited at 0.25 m |
+| A07 | 0.938-0.992 | 0.054 | 28.03 m | 0.24 m | width-limited fragment |
+| A03 | 0.008-0.802 | 0.794 | 0.23 m | 5.90 m | persistent exit truncation |
+| A10 | 0.014-0.917 | 0.903 | 0.42 m | 2.51 m | exit sensitivity appears at 0.25 m |
+| A12 | 0.008-0.824 | 0.816 | 0.25 m | 5.27 m | persistent exit truncation |
+| A14 | 0.008-0.426 | 0.418 | 0.24 m | 17.20 m | strong clearance-sensitive fragmentation |
+
+Important interpretation rule:
+
+`status == ok` only means that at least one safe connected component exists. It is not an aisle-acceptance result. In particular, A01/A07 at 0.20 m and A01/A06/A07 at 0.25 m are narrower than the requested equivalent clearance diameter and can still contain small isolated safe fragments.
+
+The schema-v1 `boundary_source` field describes the nearest non-free source at one selected safe boundary cell. It must not be interpreted as the dominant cause of the full transition zone. Schema-v2 separates this into `boundary_nearest_source` and `transition.dominant_source`, and also records `aisle_width_m`, `required_diameter_m`, `width_clearance_eligible`, and `row_core_fraction`. A schema-v2 real-data replay is required before transition-source counts are frozen as measured results.
+
+Current P1-C conclusion:
+
+1. the 0.20 m result separates width-limited A01/A07 from exit-truncated A03/A12/A14;
+2. at 0.25 m, A06 joins the width-limited set and A10 develops a 2.51 m exit transition;
+3. A14 is highly clearance-sensitive, with its retained core shrinking from about 84% to about 42% of the recovered aisle length;
+4. the row/headland or row/open-area interface must therefore be represented explicitly rather than forcing the full recovered rectangle to be one homogeneous in-aisle planning domain;
+5. no static map cells were edited to obtain these handoff results.
+
+Output roots:
+
+```text
+results/P1/greenhouse_01_region_split/
+├── navigation/
+├── diagnostics/
+└── handoffs/
+    ├── r020/
+    └── r025/
+```
