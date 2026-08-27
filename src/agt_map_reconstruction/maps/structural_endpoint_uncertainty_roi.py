@@ -1,6 +1,6 @@
 """Uncertainty-aware ROI derived from fused P1-D3.1 structural endpoints.
 
-The fused center trend is only a summary.  Conservative headland ROIs begin
+The fused center trend is only a summary. Conservative headland ROIs begin
 outside the trend +/- residual uncertainty band and explicitly exclude any
 cross-row strip whose ridge endpoint remains structurally unresolved.
 
@@ -105,10 +105,12 @@ def build_structural_endpoint_uncertainty_roi(
     grid_shape_yx,
     uncertainty_quantile="p95",
 ):
-    """Build conservative outward ROIs and explicit structural uncertainty masks.
+    """Build disjoint conservative, boundary-uncertain, and unresolved masks.
 
-    Conservative cells are outside the trend +/- selected residual quantile and
-    outside every cross-row strip whose ridge endpoint remains unresolved.
+    Conservative and boundary-uncertainty cells are restricted to structurally
+    resolved cross-row strips. Unresolved ridge strips are emitted only through
+    ``structurally_unresolved_cross`` so downstream evidence counts do not
+    silently double-count them.
     """
     shape = tuple(int(v) for v in grid_shape_yx)
     if len(shape) != 2 or shape[0] <= 0 or shape[1] <= 0:
@@ -132,6 +134,7 @@ def build_structural_endpoint_uncertainty_roi(
     unresolved_cross = np.zeros(v.shape, dtype=bool)
     for lo, hi in unresolved_intervals:
         unresolved_cross |= (v >= lo - 1e-12) & (v <= hi + 1e-12)
+    unresolved_cross &= cross_domain
     resolved_cross = cross_domain & ~unresolved_cross
 
     masks = {"structurally_unresolved_cross": unresolved_cross.reshape(shape)}
@@ -140,7 +143,7 @@ def build_structural_endpoint_uncertainty_roi(
         geometry = _side_geometry(uncertainty, side, resolution, quantile)
         center = geometry["slope_du_dv"] * v + geometry["intercept_u"]
         half = geometry["uncertainty_half_width_cells"]
-        uncertainty_band = cross_domain & (np.abs(u - center) <= half + 1e-12)
+        uncertainty_band = resolved_cross & (np.abs(u - center) <= half + 1e-12)
         if side == "entry":
             conservative = resolved_cross & (u < center - half - 1e-12)
         else:
@@ -171,6 +174,7 @@ def build_structural_endpoint_uncertainty_roi(
             "uncertainty_width_source": "fused_ridge_abs_residual_quantile",
             "center_trend_promoted_to_semantic_boundary": False,
             "unresolved_cross_strip_excluded": True,
+            "roi_partitions_structurally_disjoint": True,
             "geometry_only_lattice_supplies_structural_evidence": False,
             "automatic_parameter_selection": False,
             "automatic_acceptance": False,
