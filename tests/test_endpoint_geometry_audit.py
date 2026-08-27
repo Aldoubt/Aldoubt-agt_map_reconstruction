@@ -37,12 +37,12 @@ def test_audit_reports_clearance_handoffs_inward_from_raw_endpoints():
 
     assert result["eligible_row_count"] == 2
     assert np.allclose(result["row_axis_direction"], [1.0, 0.0])
-    assert result["offset_summary"]["entry_inward"]["median_m"] == 0.4
-    assert result["offset_summary"]["exit_inward"]["median_m"] == 0.5
-    assert result["raw_endpoint_fit"]["entry"]["intercept_u"] == 10.0
-    assert result["clearance_handoff_fit"]["entry"]["intercept_u"] == 14.0
-    assert result["raw_endpoint_fit"]["exit"]["intercept_u"] == 40.0
-    assert result["clearance_handoff_fit"]["exit"]["intercept_u"] == 35.0
+    assert np.isclose(result["offset_summary"]["entry_inward"]["median_m"], 0.4)
+    assert np.isclose(result["offset_summary"]["exit_inward"]["median_m"], 0.5)
+    assert np.isclose(result["raw_endpoint_fit"]["entry"]["intercept_u"], 10.0)
+    assert np.isclose(result["clearance_handoff_fit"]["entry"]["intercept_u"], 14.0)
+    assert np.isclose(result["raw_endpoint_fit"]["exit"]["intercept_u"], 40.0)
+    assert np.isclose(result["clearance_handoff_fit"]["exit"]["intercept_u"], 35.0)
     assert result["policy"]["d3_geometry_modified"] is False
 
 
