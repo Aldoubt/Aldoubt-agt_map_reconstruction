@@ -91,10 +91,13 @@ def test_roi_excludes_structurally_unresolved_ridge_cross_strip():
     assert masks["structurally_unresolved_cross"][6, 1]
     assert not masks["entry_conservative_outward"][6, 1]
     assert not masks["exit_conservative_outward"][6, 9]
+    assert not masks["entry_boundary_uncertainty"][6, 3]
+    assert not masks["exit_boundary_uncertainty"][6, 7]
 
     # A resolved cross strip remains available to conservative ROI evaluation.
     assert masks["entry_conservative_outward"][3, 1]
     assert result["unresolved_ridge_ids"] == ["R23"]
     assert result["policy"]["unresolved_cross_strip_excluded"] is True
+    assert result["policy"]["roi_partitions_structurally_disjoint"] is True
     assert result["policy"]["geometry_only_lattice_supplies_structural_evidence"] is False
     assert result["policy"]["semantic_promotion"] is False
