@@ -62,12 +62,24 @@ def test_failure_handoff_cli_uses_per_aisle_first_unexpected_radius(tmp_path):
 
     assert completed.returncode == 0, completed.stderr
     payload = json.loads((output / "failure_handoffs.json").read_text())
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 2
     assert payload["target_count"] == 2
     by_label = {item["label"]: item for item in payload["handoffs"]}
     assert by_label["A03"]["radius_m"] == 0.20
     assert by_label["A10"]["radius_m"] == 0.25
     assert by_label["A03"]["width_clearance_eligible"] is True
     assert by_label["A10"]["width_clearance_eligible"] is True
+
+    # P1-B style localization is the causal diagnosis. The transition-wide
+    # source remains contextual and must not silently replace it.
+    assert by_label["A03"]["causal_blocker"]["failure_region"] == "exit"
+    assert by_label["A03"]["causal_blocker"]["dominant_blocking_source"] == "unknown"
+    assert by_label["A10"]["causal_blocker"]["failure_region"] == "exit"
+    assert by_label["A10"]["causal_blocker"]["dominant_blocking_source"] == "unknown"
+    assert "exit_transition_context_source" in by_label["A03"]
+    assert "causal_context_agreement" in by_label["A03"]
+
     assert "A03: radius=0.20" in completed.stdout
     assert "A10: radius=0.25" in completed.stdout
+    assert "causal_source=unknown" in completed.stdout
+    assert "exit_context_source=" in completed.stdout
