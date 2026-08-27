@@ -58,12 +58,17 @@ def test_aisle_handoff_cli_writes_clearance_conditioned_asset(tmp_path):
     assert payload["radius_m"] == 0.20
     assert payload["aisle_count"] == 1
     assert payload["ok_count"] == 1
+    assert payload["width_clearance_eligible_count"] == 1
+    assert payload["width_limited_count"] == 0
     handoff = payload["handoffs"][0]
     assert handoff["label"] == "A01"
+    assert handoff["width_clearance_eligible"] is True
+    assert handoff["row_core_fraction"] > 0.60
     assert handoff["exit_handoff"]["boundary_nearest_source"] == "unknown"
     assert handoff["exit_transition"]["dominant_source"] == "unknown"
     assert handoff["exit_transition_length_m"] > 2.5
     assert (output / "aisle_handoffs.csv").is_file()
     assert "radius: 0.20" in completed.stdout
+    assert "width_limited: 0" in completed.stdout
     assert "exit_transition_source=unknown" in completed.stdout
     assert "A01" in completed.stdout
