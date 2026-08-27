@@ -40,6 +40,7 @@ def _fit_side(
     residual_floor_m,
     mad_scale,
     min_inlier_count,
+    max_fit_rmse_m,
 ):
     rows = []
     candidate_points = []
@@ -134,17 +135,20 @@ def _fit_side(
         row["inlier"] = inlier
         row["residual_m"] = residual
 
+    rmse_m = float(np.sqrt(np.mean(residual_m[inlier_mask] ** 2)))
+    fit = {
+        "slope_du_dv": slope,
+        "intercept_u": intercept,
+        "residual_rmse_m": rmse_m,
+        "residual_median_abs_m": float(np.median(np.abs(residual_m[inlier_mask]))),
+    }
+    fit_status = "ok" if rmse_m <= float(max_fit_rmse_m) + 1e-12 else "poor_fit_quality"
     return {
-        "fit_status": "ok",
+        "fit_status": fit_status,
         "candidate_count": candidate_count,
         "inlier_count": inlier_count,
         "outlier_count": candidate_count - inlier_count,
-        "fit": {
-            "slope_du_dv": slope,
-            "intercept_u": intercept,
-            "residual_rmse_m": float(np.sqrt(np.mean(residual_m[inlier_mask] ** 2))),
-            "residual_median_abs_m": float(np.median(np.abs(residual_m[inlier_mask]))),
-        },
+        "fit": fit,
         "initial_robust_fit": {
             "method": "median_pairwise_slope_plus_median_intercept",
             "slope_du_dv": slope0,
@@ -167,12 +171,14 @@ def fit_structural_endpoint_boundaries(
     residual_floor_m=0.30,
     mad_scale=3.0,
     min_inlier_count=3,
+    max_fit_rmse_m=0.50,
 ):
     """Fit robust common entry/exit lines from bilateral structural endpoints."""
     resolution = float(resolution_m)
     floor_m = float(residual_floor_m)
     scale = float(mad_scale)
     minimum = int(min_inlier_count)
+    max_rmse = float(max_fit_rmse_m)
     if resolution <= 0.0:
         raise ValueError("resolution_m must be > 0")
     if floor_m < 0.0:
@@ -181,6 +187,8 @@ def fit_structural_endpoint_boundaries(
         raise ValueError("mad_scale must be >= 0")
     if minimum < 2:
         raise ValueError("min_inlier_count must be >= 2")
+    if max_rmse <= 0.0:
+        raise ValueError("max_fit_rmse_m must be > 0")
 
     axis = _unit(row_axis)
     cross = _unit(cross_axis)
@@ -189,7 +197,7 @@ def fit_structural_endpoint_boundaries(
 
     records = list(endpoint_records)
     result = {
-        "schema_version": 1,
+        "schema_version": 2,
         "row_axis_direction": axis.tolist(),
         "cross_row_direction": cross.tolist(),
         "resolution_m": resolution,
@@ -197,6 +205,7 @@ def fit_structural_endpoint_boundaries(
             "residual_floor_m": floor_m,
             "mad_scale": scale,
             "min_inlier_count": minimum,
+            "max_fit_rmse_m": max_rmse,
         },
         "entry": _fit_side(
             records,
@@ -207,6 +216,7 @@ def fit_structural_endpoint_boundaries(
             residual_floor_m=floor_m,
             mad_scale=scale,
             min_inlier_count=minimum,
+            max_fit_rmse_m=max_rmse,
         ),
         "exit": _fit_side(
             records,
@@ -217,10 +227,12 @@ def fit_structural_endpoint_boundaries(
             residual_floor_m=floor_m,
             mad_scale=scale,
             min_inlier_count=minimum,
+            max_fit_rmse_m=max_rmse,
         ),
         "policy": {
             "outliers_deleted": False,
             "ambiguous_rows_used_for_fit": False,
+            "poor_fit_promoted": False,
             "automatic_parameter_selection": False,
             "automatic_acceptance": False,
             "navigation_map_modified": False,
