@@ -48,6 +48,10 @@ def _summary_row(item):
         "status": item.get("status"),
         "component_selection": item.get("component_selection"),
         "radius_m": item.get("radius_m"),
+        "aisle_width_m": item.get("aisle_width_m"),
+        "required_diameter_m": item.get("required_diameter_m"),
+        "width_clearance_eligible": item.get("width_clearance_eligible"),
+        "row_core_fraction": item.get("row_core_fraction"),
         "row_core_start_s_over_l": item.get("row_core_start_s_over_l"),
         "row_core_end_s_over_l": item.get("row_core_end_s_over_l"),
         "row_core_length_m": item.get("row_core_length_m"),
@@ -128,6 +132,12 @@ def main():
         item for item in ok
         if item.get("component_selection") == "largest_longitudinal_span"
     ]
+    width_eligible = [
+        item for item in results if item.get("width_clearance_eligible") is True
+    ]
+    width_limited = [
+        item for item in results if item.get("width_clearance_eligible") is False
+    ]
 
     payload = {
         "schema_version": 2,
@@ -152,12 +162,19 @@ def main():
                 "dominant nearest source over clearance-blocked cells in the "
                 "entry/exit transition zone"
             ),
+            "status_semantics": (
+                "ok means a safe component exists; it does not imply width "
+                "eligibility or full-length aisle connectivity"
+            ),
+            "width_eligibility": "aisle_width_m >= 2 * radius_m",
             "map_editing": False,
         },
         "aisle_count": len(results),
         "ok_count": len(ok),
         "no_safe_component_count": len(no_safe),
         "fallback_component_count": len(fallback),
+        "width_clearance_eligible_count": len(width_eligible),
+        "width_limited_count": len(width_limited),
         "handoffs": results,
     }
     (output / "aisle_handoffs.json").write_text(
@@ -171,6 +188,10 @@ def main():
         "status",
         "component_selection",
         "radius_m",
+        "aisle_width_m",
+        "required_diameter_m",
+        "width_clearance_eligible",
+        "row_core_fraction",
         "row_core_start_s_over_l",
         "row_core_end_s_over_l",
         "row_core_length_m",
@@ -202,16 +223,23 @@ def main():
     print("ok:", len(ok))
     print("no_safe_component:", len(no_safe))
     print("largest_span_fallback:", len(fallback))
+    print("width_clearance_eligible:", len(width_eligible))
+    print("width_limited:", len(width_limited))
     for item in results:
         if item.get("status") != "ok":
-            print(f"{item['label']}: status={item.get('status')}")
+            print(
+                f"{item['label']}: status={item.get('status')} "
+                f"width_eligible={item.get('width_clearance_eligible')}"
+            )
             continue
         entry = item["entry_handoff"]
         exit_ = item["exit_handoff"]
         entry_transition = item["entry_transition"]
         exit_transition = item["exit_transition"]
         print(
-            f"{item['label']}: core={item['row_core_start_s_over_l']:.3f}.."
+            f"{item['label']}: width_eligible={item['width_clearance_eligible']} "
+            f"core_fraction={item['row_core_fraction']:.3f} "
+            f"core={item['row_core_start_s_over_l']:.3f}.."
             f"{item['row_core_end_s_over_l']:.3f} "
             f"entry_transition_m={item['entry_transition_length_m']:.2f} "
             f"exit_transition_m={item['exit_transition_length_m']:.2f} "
