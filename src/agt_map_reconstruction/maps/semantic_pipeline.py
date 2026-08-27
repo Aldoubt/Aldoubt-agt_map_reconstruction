@@ -61,9 +61,18 @@ def build_semantic_assets_from_points(
     min_width_m=0.30,
     min_length_m=2.0,
     include_interpolated=True,
+    use_q90_for_obstacles=False,
     navigation_clearance_radii_m=(0.20, 0.25, 0.30, 0.35, 0.40, 0.50),
 ):
-    """Build robust evidence, semantic geometry, and a Nav2 static-map bundle."""
+    """Build robust evidence, semantic geometry, and a Nav2 static-map bundle.
+
+    The conservative default matches the original EXP003 policy: obstacle
+    classification uses the low-envelope height statistic. ``q90_height`` is
+    only used when ``use_q90_for_obstacles`` is explicitly enabled for a
+    diagnostic comparison. In dense vegetation, q90 commonly represents
+    canopy/leaf returns above otherwise traversable ground and is therefore too
+    aggressive as a default static-obstacle statistic.
+    """
     from .elevation_statistics import points_to_elevation_statistics
     from .ground_evidence import (
         GroundEvidenceConfig,
@@ -82,11 +91,12 @@ def build_semantic_assets_from_points(
     if abs(float(ground_config.resolution) - float(resolution)) > 1e-12:
         raise ValueError("ground_config resolution must match raster resolution")
 
+    q90_height = statistics.q90_height if use_q90_for_obstacles else None
     evidence_details = build_ground_evidence_details(
         statistics.low_height,
         statistics.point_count,
         ground_config,
-        q90_height=statistics.q90_height,
+        q90_height=q90_height,
     )
     metadata = metadata_from_statistics(statistics)
     if row_direction is None:
@@ -127,6 +137,8 @@ def build_semantic_assets_from_points(
             "histogram_bins": int(histogram_bins),
         },
         "ground_evidence_config": asdict(ground_config),
+        "obstacle_height_source": "q90_height" if use_q90_for_obstacles else "low_height",
+        "use_q90_for_obstacles": bool(use_q90_for_obstacles),
         "row_direction_source": row_direction_source,
         "row_direction": bundle["manifest"]["row_direction"],
     }
