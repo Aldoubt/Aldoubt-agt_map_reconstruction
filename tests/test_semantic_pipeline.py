@@ -25,6 +25,26 @@ def test_infer_row_direction_from_horizontal_evidence_bands():
     assert abs(direction[1]) < 0.05
 
 
+def test_infer_row_direction_resolves_pca_axis_ambiguity_from_parallel_occupied_rows():
+    evidence = np.zeros((140, 80), dtype=np.uint8)
+
+    # Free aisle support spans a taller scene than it is wide, so naive PCA
+    # over all free cells chooses the cross-row (vertical) axis.
+    for y in (10, 30, 50, 70, 90, 110, 130):
+        evidence[y:y + 5, 10:70] = EvidenceClass.FREE_CONFIRMED
+
+    # The actual agricultural structure is a set of long, parallel horizontal
+    # occupied rows. Use that banding evidence to resolve the 90-degree PCA
+    # ambiguity instead of blindly accepting the principal free-space axis.
+    for y in (20, 40, 60, 80, 100, 120):
+        evidence[y:y + 2, 5:75] = EvidenceClass.OCCUPIED_CONFIRMED
+
+    direction = infer_row_direction_from_evidence(evidence)
+
+    assert abs(direction[0]) > 0.99
+    assert abs(direction[1]) < 0.05
+
+
 def test_infer_row_direction_rejects_insufficient_support():
     evidence = np.zeros((5, 5), dtype=np.uint8)
     evidence[2, 2] = EvidenceClass.FREE_CONFIRMED
