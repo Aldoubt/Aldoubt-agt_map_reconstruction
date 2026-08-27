@@ -95,8 +95,6 @@ def _traverse_clipped_cells(p0, p1, width, height, t0, t1):
     q0 = np.asarray(p0, dtype=float) + float(t0) * direction
     q1 = np.asarray(p0, dtype=float) + float(t1) * direction
 
-    # Keep floor() inside the last valid cell when a clipped endpoint lies
-    # exactly on the upper grid boundary.
     upper_x = np.nextafter(float(width), -np.inf)
     upper_y = np.nextafter(float(height), -np.inf)
     q0[0] = np.clip(q0[0], 0.0, upper_x)
@@ -158,17 +156,14 @@ def _traverse_clipped_cells(p0, p1, width, height, t0, t1):
         local_enter = local_exit
 
 
-def accumulate_ground_aware_ray_support(
-    bundle,
-    ground_surface,
-    metadata,
-    config,
-):
-    """Accumulate per-cell low-height line-of-sight support counts.
+def accumulate_ground_aware_ray_support(bundle, ground_surface, metadata, config):
+    """Accumulate low-height line-of-sight support per grid cell.
 
-    The hit cell is excluded even if its local segment lies in the configured
-    height band. Cells with no finite ground reference cannot receive support.
-    Returned masks are diagnostic evidence only and never modify the PGM.
+    ``support_count`` counts supporting rays. When ``bundle.scan_index`` is
+    present, ``scan_support_count`` counts at most one support per physical scan
+    per cell. Scan indices must be non-decreasing so same-scan rays remain one
+    contiguous temporal group. The hit cell is never free and NaN ground cells
+    cannot receive support.
     """
     from .observation_ray_bundle import ObservationRayBundle
 
@@ -194,10 +189,21 @@ def accumulate_ground_aware_ray_support(
     origins_grid = _world_to_grid_continuous(origins, metadata)
     endpoints_grid = _world_to_grid_continuous(endpoints, metadata)
 
+    scan_indices = None
+    scan_support = None
+    last_scan_seen = None
+    if bundle.scan_index is not None:
+        scan_indices = np.asarray(bundle.scan_index, dtype=np.int64)
+        if np.any(np.diff(scan_indices) < 0):
+            raise ValueError("scan_index must be non-decreasing for scan support counting")
+        scan_support = np.zeros(expected_shape, dtype=np.uint32)
+        last_scan_seen = np.full(expected_shape, -1, dtype=np.int64)
+
     support = np.zeros(expected_shape, dtype=np.uint32)
     accepted_ray_count = 0
     traversed_cell_visits = 0
     supported_cell_visits = 0
+    scan_supported_cell_visits = 0
 
     for index in range(bundle.ray_count):
         origin = origins[index]
@@ -214,10 +220,7 @@ def accumulate_ground_aware_ray_support(
         p0 = origins_grid[index]
         p1 = endpoints_grid[index]
         clipped = _clip_segment_to_grid(
-            p0,
-            p1,
-            int(metadata.width),
-            int(metadata.height),
+            p0, p1, int(metadata.width), int(metadata.height)
         )
         if clipped is None:
             continue
@@ -231,6 +234,7 @@ def accumulate_ground_aware_ray_support(
         if endpoint_inside:
             hit_cell = (int(np.floor(p1[0])), int(np.floor(p1[1])))
 
+        scan_id = None if scan_indices is None else int(scan_indices[index])
         for x, y, cell_t0, cell_t1 in _traverse_clipped_cells(
             p0,
             p1,
@@ -257,9 +261,13 @@ def accumulate_ground_aware_ray_support(
                 continue
             support[y, x] += np.uint32(1)
             supported_cell_visits += 1
+            if scan_id is not None and last_scan_seen[y, x] != scan_id:
+                scan_support[y, x] += np.uint32(1)
+                last_scan_seen[y, x] = scan_id
+                scan_supported_cell_visits += 1
 
     support_mask = support >= int(config.min_support_rays)
-    return {
+    result = {
         "support_count": support,
         "support_mask": support_mask,
         "summary": {
@@ -270,6 +278,11 @@ def accumulate_ground_aware_ray_support(
             "supported_cell_visits": int(supported_cell_visits),
             "supported_cell_count": int(np.count_nonzero(support_mask)),
             "finite_ground_cell_count": int(np.count_nonzero(np.isfinite(ground))),
+            "scan_support_available": scan_support is not None,
+            "scan_supported_cell_visits": int(scan_supported_cell_visits),
             "semantic_promotion": False,
         },
     }
+    if scan_support is not None:
+        result["scan_support_count"] = scan_support
+    return result
