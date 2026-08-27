@@ -44,9 +44,9 @@ def test_low_height_ray_supports_traversed_cells_but_not_hit_cell():
         _config(),
     )
 
-    # Cells x=0..4 are traversed at low height; x=5 is the return cell.
     np.testing.assert_array_equal(result["support_count"][1, :6], [1, 1, 1, 1, 1, 0])
     assert result["summary"]["supported_cell_count"] == 5
+    assert result["summary"]["scan_support_available"] is False
 
 
 def test_high_canopy_ray_does_not_clear_ground_cells():
@@ -107,3 +107,61 @@ def test_minimum_support_count_is_applied_after_accumulation():
     assert result["support_count"][1, 3] == 2
     assert result["support_mask"][1, 3]
     assert not result["support_mask"][1, 5]
+
+
+def test_same_scan_multiple_rays_count_once_for_scan_support():
+    metadata = _metadata()
+    ground = np.zeros((3, 8), dtype=float)
+    bundle = validate_observation_ray_bundle(
+        [[0.5, 1.5, 0.20], [0.5, 1.5, 0.20]],
+        [[5.5, 1.5, 0.20], [5.5, 1.5, 0.20]],
+        scan_index=[7, 7],
+    )
+
+    result = accumulate_ground_aware_ray_support(
+        bundle,
+        ground,
+        metadata,
+        _config(),
+    )
+
+    assert result["support_count"][1, 3] == 2
+    assert result["scan_support_count"][1, 3] == 1
+    assert result["summary"]["scan_support_available"] is True
+
+
+def test_different_scans_accumulate_independent_scan_support():
+    metadata = _metadata()
+    ground = np.zeros((3, 8), dtype=float)
+    bundle = validate_observation_ray_bundle(
+        [[0.5, 1.5, 0.20], [0.5, 1.5, 0.20]],
+        [[5.5, 1.5, 0.20], [5.5, 1.5, 0.20]],
+        scan_index=[7, 8],
+    )
+
+    result = accumulate_ground_aware_ray_support(
+        bundle,
+        ground,
+        metadata,
+        _config(),
+    )
+
+    assert result["support_count"][1, 3] == 2
+    assert result["scan_support_count"][1, 3] == 2
+
+
+def test_scan_indices_must_be_nondecreasing_for_unique_scan_counting():
+    metadata = _metadata()
+    ground = np.zeros((3, 8), dtype=float)
+    bundle = validate_observation_ray_bundle(
+        [[0.5, 1.5, 0.20], [0.5, 1.5, 0.20]],
+        [[5.5, 1.5, 0.20], [5.5, 1.5, 0.20]],
+        scan_index=[8, 7],
+    )
+
+    try:
+        accumulate_ground_aware_ray_support(bundle, ground, metadata, _config())
+    except ValueError as exc:
+        assert "non-decreasing" in str(exc)
+    else:
+        raise AssertionError("expected non-decreasing scan_index rejection")
