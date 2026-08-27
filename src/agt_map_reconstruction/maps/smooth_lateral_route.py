@@ -10,6 +10,7 @@ from __future__ import annotations
 import csv
 import json
 import math
+import re
 from pathlib import Path
 
 import cv2
@@ -456,9 +457,12 @@ def _draw_legend(image):
         ((0, 180, 255), 'recovered centerline'),
         ((0, 180, 0), 'smooth route PASS'),
         ((0, 0, 255), 'B1 best failed constant route'),
+        ((255, 0, 0), 'blue dots: smooth-route control stations'),
+        ((0, 0, 220), 'red labels / X: failed aisle and first failed station'),
     ]
-    cv2.rectangle(image, (6, 4), (245, 66), (245, 245, 245), -1)
-    cv2.rectangle(image, (6, 4), (245, 66), (40, 40, 40), 1)
+    height = 4 + 18 * len(entries) + 8
+    cv2.rectangle(image, (6, 4), (430, height), (245, 245, 245), -1)
+    cv2.rectangle(image, (6, 4), (430, height), (40, 40, 40), 1)
     for idx, (color, text) in enumerate(entries):
         yy = y + idx * 18
         cv2.line(image, (x, yy), (x + 24, yy), color, 2, cv2.LINE_AA)
@@ -494,6 +498,23 @@ def _overlay(base, rectangles, footprint, resolution, result, baseline_b1=None, 
             ], dtype=np.int32)
             if len(pts) > 1:
                 cv2.polylines(image, [pts], False, (0, 180, 0), 2, cv2.LINE_AA)
+            # Show the dynamic-programming control lattice path as blue dots;
+            # the green line is the final 0.10 m sampled route.
+            controls = item.get('control_offsets_m', [])
+            if controls:
+                station_count = len(controls)
+                rear = max(0.0, -float(footprint[:, 0].min()))
+                front = max(0.0, float(footprint[:, 0].max()))
+                distances = np.linspace(
+                    rear, geom['length_m'] - front, station_count
+                )
+                control_points = [
+                    geom['start'] + geom['unit'] * (distance / resolution)
+                    + geom['normal'] * (offset / resolution)
+                    for distance, offset in zip(distances, controls)
+                ]
+                for point in control_points:
+                    cv2.circle(image, _image_point(point, h), 2, (255, 0, 0), -1)
         elif label in baseline:
             b = baseline[label]
             offset = b.get('best_attempt_offset_m')
@@ -501,6 +522,25 @@ def _overlay(base, rectangles, footprint, resolution, result, baseline_b1=None, 
                 start, end = _constant_segment(rectangle, footprint, resolution, float(offset))
                 cv2.line(image, _image_point(start, h), _image_point(end, h),
                          (0, 0, 255), 2, cv2.LINE_AA)
+        # Put every aisle identifier at its geometric midpoint. Failed
+        # aisles additionally get a red X at the first failed control station.
+        center = 0.25 * (np.asarray(rectangle['polygon_xy'], dtype=float).sum(axis=0))
+        center_px = _image_point(center, h)
+        status_color = (0, 150, 0) if item['passed'] else (0, 0, 220)
+        cv2.putText(image, label, (center_px[0] - 14, center_px[1] + 4),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.42, (255, 255, 255), 3, cv2.LINE_AA)
+        cv2.putText(image, label, (center_px[0] - 14, center_px[1] + 4),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.42, status_color, 1, cv2.LINE_AA)
+        if not item['passed']:
+            reason = str(item.get('failure_reason') or '')
+            match = re.search(r'station_(\d+)', reason)
+            station = int(match.group(1)) if match else 0
+            count = max(1, int(item.get('control_point_count', 1)) - 1)
+            fraction = float(np.clip(station / count, 0.0, 1.0))
+            failure_point = geom['start'] + geom['unit'] * (fraction * geom['length_m'] / resolution)
+            px = _image_point(failure_point, h)
+            cv2.drawMarker(image, px, (0, 0, 255), cv2.MARKER_TILTED_CROSS,
+                           14, 2, cv2.LINE_AA)
     _draw_legend(image)
 
     if focus is None:
@@ -534,7 +574,8 @@ def write_smooth_route_bundle(base_map, aisle_rectangles, footprint_xy_m,
                               control_spacing_m=0.50, offset_step_m=0.05,
                               max_offset_change_m=0.10, endpoint_trim_m=0.0,
                               candidate_mask=None, allow_unknown=False,
-                              baseline_b1=None, footprint_name='robot', focus_aisles=None):
+                              baseline_b1=None, footprint_name='robot', focus_aisles=None,
+                              manual_review=None):
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
     footprint = _as_footprint(footprint_xy_m)
@@ -543,6 +584,9 @@ def write_smooth_route_bundle(base_map, aisle_rectangles, footprint_xy_m,
         sample_spacing_m, control_spacing_m, offset_step_m,
         max_offset_change_m, endpoint_trim_m, candidate_mask, allow_unknown, baseline_b1,
     )
+    if manual_review is not None:
+        from .review_corrections import apply_review_route_status
+        result = apply_review_route_status(result, manual_review)
     result['footprint'] = {'name': str(footprint_name), 'polygon_xy_m': footprint.tolist()}
     result['resolution_m'] = float(resolution)
 

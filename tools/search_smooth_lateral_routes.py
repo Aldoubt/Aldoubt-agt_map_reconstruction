@@ -10,6 +10,7 @@ import numpy as np
 import yaml
 
 from agt_map_reconstruction.maps.smooth_lateral_route import write_smooth_route_bundle
+from agt_map_reconstruction.maps.review_corrections import load_review
 
 
 def _load_aisles(path):
@@ -62,6 +63,7 @@ def main():
     )
     parser.add_argument('--focus-aisles', nargs='*', default=['A05', 'A07', 'A20'])
     parser.add_argument('--allow-unknown', action='store_true')
+    parser.add_argument('--review', help='optional manual route review JSON')
     args = parser.parse_args()
 
     map_yaml = yaml.safe_load(Path(args.map_yaml).read_text(encoding='utf-8'))
@@ -88,6 +90,7 @@ def main():
         baseline_b1=baseline,
         footprint_name=footprint_name,
         focus_aisles=args.focus_aisles,
+        manual_review=load_review(args.review) if args.review else None,
     )
 
     summary = result['summary']

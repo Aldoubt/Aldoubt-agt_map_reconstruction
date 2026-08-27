@@ -621,3 +621,64 @@ Next stage: EXP004-C Headland Handoff & Ackermann Transition
 4. use measured wheelbase / steering geometry from robot configuration for minimum-turning-radius constraints rather than inventing values;
 5. separate failure reasons into map collision, unknown overlap, insufficient headland depth, and kinematic infeasibility;
 6. only after this offline handoff test is stable, move to Nav2/runtime integration.
+
+### EXP004-B2 manual review correction and PCD replay
+
+Status: completed on 2026-08-27
+
+The PCD overlay review identified two local false positives. The correction
+stage preserves hard geometry globally and clears only the reviewed station
+ranges:
+
+```text
+A17: labels 5/6, stations 0..12
+A18: label  6,   stations 18..28
+```
+
+The corrected map was regenerated at `results/EXP004/navigation-map-reviewed-v2/`
+and replayed with the same strict `mk_mini` polygon footprint and unknown-space
+policy. The result is:
+
+```text
+PASS:   17 / 20
+FAIL:   A01, A03, A06
+A17:    PASS after local correction
+A18:    PASS after local correction
+```
+
+Failure interpretation remains conservative: A01 is manually confirmed
+blocked, A06 contains a pillar, and A03 still fails at interior station 7.
+A03 is therefore left for the next aisle-boundary/PCD investigation rather
+than being manually overridden.
+
+The neutral-color PCD replay is exported to
+`results/EXP004/pcd-route-review-reviewed-v2/` and includes the reviewed
+aisle rectangles and route result for interactive inspection.
+
+#### EXP004-B2 reviewed-v3 geometry and coordinate-frame update
+
+On 2026-08-27, ridge end caps were clipped to the interior scene boundary as
+well as aisle end caps. This removes overlong ridge geometry from the
+headland/turning area while preserving ridge semantics. The strict replay
+remains `17 / 20`, with `A01`, `A03`, and `A06` failed; A11, A17, and A18 pass.
+
+A11's diesel-generator-side gap is not automatically converted to free space
+in this iteration. The generator remains a hard obstacle; the narrow passage
+will be added as a small explicit corridor after its PCD width is measured,
+so the result does not accidentally erase the machine footprint.
+
+The 2D top-view export and interactive 3D viewer now display the map origin
+and X/Y coordinate axes. Current frame metadata is:
+
+```text
+origin:     (-4.5383229, -28.9657173, 0.0) m
+resolution: 0.05 m/cell
+```
+
+Artifacts:
+
+```text
+results/EXP004/navigation-map-reviewed-v3/
+results/EXP004/smooth-lateral-route-reviewed-v3/
+results/EXP004/pcd-route-review-reviewed-v3/
+```

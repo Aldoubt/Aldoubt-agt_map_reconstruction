@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "source": "manual visual review of PCD semantic overlay",
+  "aisles": {
+    "A01": {"review_status": "blocked", "reason": "confirmed obstruction"},
+    "A02": {"review_status": "pass", "reason": "map debris false positive", "clear_labels": [2, 3, 4, 5, 6]},
+    "A03": {"review_status": "pass", "reason": "false ridge at upper end", "clear_labels": [2, 3, 4, 5]},
+    "A04": {"review_status": "pass", "reason": "visually clear"},
+    "A05": {"review_status": "pass", "reason": "visually clear"},
+    "A06": {"review_status": "blocked", "reason": "pillar present", "pillar_warning": true},
+    "A07": {"review_status": "pass", "reason": "rectangle extends outside wall"},
+    "A08": {"review_status": "pass", "reason": "visually clear"},
+    "A09": {"review_status": "pass", "reason": "rectangle extends outside wall"},
+    "A10": {"review_status": "pass", "reason": "rectangle extends outside wall"},
+    "A11": {"review_status": "pass", "reason": "visually clear"},
+    "A12": {"review_status": "pass", "reason": "visually clear"},
+    "A13": {"review_status": "pass", "reason": "vegetation falsely projected to ground", "clear_labels": [2, 3, 4, 5, 6]},
+    "A14": {"review_status": "pass", "reason": "visually clear"},
+    "A15": {"review_status": "pass", "reason": "vegetation falsely projected to ground", "clear_labels": [2, 3, 4, 5, 6]},
+    "A16": {"review_status": "pass", "reason": "visually passable", "pillar_warning": true},
+    "A17": {"review_status": "pass", "reason": "local step/pillar false positive", "clear_labels": [5, 6], "clear_station_range": [0, 12]},
+    "A18": {"review_status": "pass", "reason": "local pillar false positive", "clear_labels": [6], "clear_station_range": [18, 28]},
+    "A20": {"review_status": "pass", "reason": "rectangle extends outside wall"}
+  },
+  "unreviewed": [],
+  "correction_priorities": [
+    "clip aisle endpoint rectangles to the interior greenhouse wall",
+    "remove upper-end false ridge contribution near A03",
+    "suppress vegetation-only ground projections near A13 and A15",
+    "retain pillar as a hard obstacle near A06",
+    "retain A16 as pass with a pillar review warning"
+  ]
+}
