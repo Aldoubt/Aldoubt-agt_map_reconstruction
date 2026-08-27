@@ -194,6 +194,11 @@ def main():
             f"cross_span_fraction={item['cross_row_span_fraction']:.6f} "
             f"p50={q['p50']} p95={q['p95']} max={q['max']}"
         )
+        for source_name, source_q in item.get("abs_residual_m_by_evidence_source", {}).items():
+            print(
+                f"  {source_name}: count={source_q['count']} "
+                f"p50={source_q['p50']} p95={source_q['p95']} max={source_q['max']}"
+            )
     print("geometry_only_lattice_supplies_structural_evidence: false")
     print("local_3d_structure_promoted_to_endpoint_support: false")
     print("automatic_acceptance: false")
