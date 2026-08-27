@@ -75,12 +75,24 @@ def test_uncertainty_roi_evidence_partitions_unknown_without_mutating_inputs():
         3 / trusted_ground,
     )
     assert np.isclose(
+        entry_stats["scan_observed_fraction_of_unknown"],
+        3 / entry_stats["unknown_cell_count"],
+    )
+    assert np.isclose(
         entry_stats["repeated_scan_fraction_of_trusted_ground_unknown"],
         2 / trusted_ground,
     )
     assert np.isclose(
+        entry_stats["repeated_scan_fraction_of_unknown"],
+        2 / entry_stats["unknown_cell_count"],
+    )
+    assert np.isclose(
         entry_stats["ray_supported_fraction_of_trusted_ground_unknown"],
         2 / trusted_ground,
+    )
+    assert np.isclose(
+        entry_stats["ray_supported_fraction_of_unknown"],
+        2 / entry_stats["unknown_cell_count"],
     )
 
     assert result["policy"]["frozen_evidence_reused"] is True
@@ -117,4 +129,5 @@ def test_unresolved_cross_strip_is_reported_separately_not_as_conservative_roi()
     assert result["entry"]["conservative_outward"]["roi_cell_count"] == 0
     assert result["entry"]["conservative_outward"]["ground_reference_ceiling_fraction_of_unknown"] is None
     assert result["entry"]["conservative_outward"]["scan_observed_fraction_of_trusted_ground_unknown"] is None
+    assert result["entry"]["conservative_outward"]["scan_observed_fraction_of_unknown"] is None
     assert result["policy"]["unresolved_cross_strip_promoted_to_resolved"] is False
