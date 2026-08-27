@@ -626,11 +626,11 @@ Next stage: EXP004-C Headland Handoff & Ackermann Transition
 
 ## P1 Evidence-driven Greenhouse Semantic Reconstruction
 
-Status: P1-A and P1-B replay-validated on 2026-08-27; P1-C row-core geometry replay-validated with schema-v1 handoff assets; schema-v2 transition-cause replay pending.
+Status: P1-A through P1-D replay-validated and frozen on 2026-08-27. P1-E0 observation-ray interface and conservative support accumulator are implemented; real trajectory-ray replay is pending.
 
 Goal:
 
-Reconstruct a conservative, interpretable semantic navigation asset directly from the `greenhouse_01` LIO-only PCD-derived evidence while keeping unknown, hard occupied evidence, row-aisle priors, and open-area candidates explicit.
+Reconstruct a conservative, interpretable greenhouse navigation asset from LIO-only map evidence while preserving the distinction between observed free, hard occupied, unknown, row structure, transition geometry, and observation insufficiency.
 
 Reference grid and row axis:
 
@@ -639,28 +639,18 @@ Reference grid and row axis:
 - row direction: `[0.9626245859468401, 0.27083926327376306]`
 - row angle: approximately 15.72 deg
 
-### P1-A Evidence, row-axis correction, and row/open-area separation
+### P1-A Evidence and row/open-area separation
 
 Measured reconstruction chain:
 
 ```text
-q90 obstacle regression
-0 aisles
-    |
-    v
-low-envelope evidence
-8 aisles with ~90 degree row-axis ambiguity
-    |
-    v
-occupied-banding row-axis resolver
-20 raw row-aligned bands
-    |
-    v
-width-distribution semantic separation
-17 row aisles + 3 wide open-area candidates
+q90 obstacle regression -> 0 aisles
+low-envelope evidence   -> 8 aisles with 90-degree axis ambiguity
+occupied-banding resolver -> 20 raw row-aligned bands
+width-distribution split -> 17 row aisles + 3 wide row-aligned open areas
 ```
 
-Evidence counts remained invariant through downstream rebuilds:
+Evidence counts remained invariant through the downstream rebuild:
 
 ```text
 unknown:              264863
@@ -669,7 +659,9 @@ occupied_confirmed:   191117
 ground_interpolated:       7
 ```
 
-The explicit aisle-conflict candidate policy is diagnostic and opt-in. After row/open-area separation:
+The width-outlier threshold is `Q3 + 1.5*IQR = 1.2875 m`. The three wide bands remain `wide_open_area_candidate`; width alone is not headland evidence.
+
+After the candidate aisle-conflict diagnostic policy:
 
 ```text
 aisle_conflict_candidates: 31331
@@ -679,9 +671,7 @@ unknown cells:              264870
 hard-as-free cells:              0
 ```
 
-The wide-band classifier uses `Q3 + 1.5 * IQR`. For the 20 recovered bands the width-outlier threshold is 1.2875 m, which moves the former A18/A19/A20 bands into three `wide_open_area_candidate` regions. They are not labelled as headland because width alone does not establish headland topology.
-
-Measured row-aisle clearance after the 17 + 3 separation:
+Measured 17-row clearance:
 
 | clearance radius | equivalent diameter | row-aisle connectivity |
 | ---: | ---: | ---: |
@@ -692,108 +682,190 @@ Measured row-aisle clearance after the 17 + 3 separation:
 | 0.40 m | 0.80 m | 2 / 17 |
 | 0.50 m | 1.00 m | 0 / 17 |
 
-Geometry diagnostics at the minimum radii:
+Geometry diagnosis:
 
 ```text
-minimum_width_limited:          A01 A07
-minimum_connectivity_limited:   A03 A12 A14
-unexpected_connectivity:        A03 A10 A12 A14
-wide_width_outliers:            none after region split
+minimum_width_limited:        A01 A07
+minimum_connectivity_limited: A03 A12 A14
+unexpected_connectivity:      A03 A10 A12 A14
+wide_width_outliers:          none after semantic split
 ```
 
-Conclusion:
+P1-A conclusion:
 
-The 20-band result must not be used as an aisle denominator. Separating three unusually wide regions restores a 17-row-aisle denominator and prevents open-area evidence from receiving the aisle-conditioned occupied-to-candidate relaxation.
+The 20 raw bands must not be used as the aisle denominator. Separating wide row-aligned open bands prevents them from receiving aisle-conditioned obstacle relaxation and preserves a 17-row semantic denominator.
 
 ### P1-B Local blocker localization
 
-Goal:
+Measured first unexpected failures:
 
-Determine whether the four geometrically unexpected clearance failures are caused by row-interior hard obstacles, unknown coverage gaps, or entry/exit handoff geometry.
-
-Measured localization:
-
-| aisle | radius | region | source | mode | key measurement |
+| aisle | radius | region | causal source | mode | blocker evidence |
 | --- | ---: | --- | --- | --- | --- |
 | A03 | 0.20 m | exit | unknown | longitudinal_gap | first blocker s/L 0.807-0.817; longest 0.65 m |
-| A10 | 0.25 m | exit | unknown | exit_probe_blocked | exit probe unsafe; no full longitudinal blocker segment |
+| A10 | 0.25 m | exit | unknown | exit_probe_blocked | exit probe unsafe; no full longitudinal blocked cross-section |
 | A12 | 0.20 m | exit | unknown | longitudinal_gap | first blocker s/L 0.828-0.838; longest 0.30 m |
 | A14 | 0.20 m | exit | unknown | exit_probe_blocked | first blocker s/L 0.849-0.864; longest 0.45 m |
 
-All four unexpected failures therefore localize to the exit side and are dominated by unknown evidence. No row-interior hard blocker was identified in this set.
+All four unexpected failures localize to the exit side and have causal source `unknown`. No row-interior hard blocker was identified in this set.
 
-Conclusion:
+### P1-C Clearance-conditioned row core and handoff
 
-The next bottleneck is the explicit row-core / transition-zone / open-area handoff, not another static-PGM morphology pass and not a more complicated in-aisle route search.
-
-### P1-C Clearance-conditioned row-core handoff geometry
-
-Goal:
-
-Replace fixed endpoint trimming with a data-derived safe row core. At each clearance radius the selected core is the connected component of `safe & aisle` that contains the aisle midpoint; if the midpoint is not safe, the largest longitudinal-span component is retained as an explicit fallback. Entry and exit handoff poses are chosen from real safe cells on the selected component, not projected onto an unsafe geometric centreline.
-
-Measured schema-v1 replay at `radius = 0.20 m`:
+At `radius=0.20 m`:
 
 ```text
 aisles: 17
-safe-component status ok: 17
+status ok: 17
 no_safe_component: 0
-largest-span fallback: 1
+largest_span_fallback: 1
+width_clearance_eligible: 15
+width_limited: 2 (A01, A07)
 ```
 
-Important row-core geometry:
+Causal replay at each aisle's first unexpected radius:
 
-| aisle | core s/L | core fraction | entry transition | exit transition | interpretation |
-| --- | --- | ---: | ---: | ---: | --- |
-| A01 | 0.494-0.510 | 0.016 | 14.83 m | 14.72 m | width-limited safe fragment |
-| A07 | 0.436-0.816 | 0.380 | 13.03 m | 5.49 m | width-limited fragmented core |
-| A03 | 0.006-0.804 | 0.798 | 0.18 m | 5.85 m | exit-truncated core |
-| A12 | 0.007-0.827 | 0.820 | 0.20 m | 5.19 m | exit-truncated core |
-| A14 | 0.007-0.847 | 0.840 | 0.20 m | 4.60 m | exit-truncated core |
-| A10 | 0.012-0.993 | 0.981 | 0.37 m | 0.20 m | near-full core at 0.20 m |
+| aisle | radius | width eligible | core fraction | exit transition | causal source | causal mode | exit context | cause/context agree |
+| --- | ---: | --- | ---: | ---: | --- | --- | --- | --- |
+| A03 | 0.20 m | yes | 0.798 | 5.85 m | unknown | longitudinal_gap | unknown | yes |
+| A10 | 0.25 m | yes | 0.903 | 2.51 m | unknown | exit_probe_blocked | hard | no |
+| A12 | 0.20 m | yes | 0.820 | 5.19 m | unknown | longitudinal_gap | hard | no |
+| A14 | 0.20 m | yes | 0.840 | 4.60 m | unknown | exit_probe_blocked | unknown | yes |
 
-Measured schema-v1 replay at `radius = 0.25 m`:
+Interpretation rule:
+
+- causal blocker source comes from the localized connectivity failure;
+- transition context source describes the wider transition-zone background;
+- `status == ok` only means a safe component exists and is not aisle acceptance;
+- a context dominated by hard boundaries does not overwrite an `unknown` causal failure.
+
+P1-C conclusion:
+
+A03/A10/A12/A14 are not width failures at their causal radii. Each retains roughly 80-90% of a safe row core and fails at the exit transition. Static-map editing and additional in-aisle planner complexity are therefore not the next causal fix.
+
+### P1-D1 Global open-area connectivity diagnostic
+
+Using the 15 width-eligible rows at `radius=0.20 m` produced 30 entry/exit handoffs:
 
 ```text
-aisles: 17
-safe-component status ok: 17
-no_safe_component: 0
-largest-span fallback: 3
+strict_connected:    2
+unknown_bridge_only: 0
+disconnected:       28
 ```
 
-Important sensitivity cases:
+Only A17 intersects O01 under strict global connected-component reachability; O02/O03 have no connections. This diagnostic has `connectivity_scope=global_component` and must not be interpreted as side-local headland connectivity.
 
-| aisle | core s/L | core fraction | entry transition | exit transition | interpretation |
-| --- | --- | ---: | ---: | ---: | --- |
-| A01 | 0.890-0.991 | 0.101 | 26.72 m | 0.27 m | width-limited fragment |
-| A06 | 0.481-0.500 | 0.019 | 14.37 m | 14.94 m | becomes width-limited at 0.25 m |
-| A07 | 0.938-0.992 | 0.054 | 28.03 m | 0.24 m | width-limited fragment |
-| A03 | 0.008-0.802 | 0.794 | 0.23 m | 5.90 m | persistent exit truncation |
-| A10 | 0.014-0.917 | 0.903 | 0.42 m | 2.51 m | exit sensitivity appears at 0.25 m |
-| A12 | 0.008-0.824 | 0.816 | 0.25 m | 5.27 m | persistent exit truncation |
-| A14 | 0.008-0.426 | 0.418 | 0.24 m | 17.20 m | strong clearance-sensitive fragmentation |
+### P1-D2 Geometric audit of O01/O02/O03
 
-Important interpretation rule:
+Measured geometry:
 
-`status == ok` only means that at least one safe connected component exists. It is not an aisle-acceptance result. In particular, A01/A07 at 0.20 m and A01/A06/A07 at 0.25 m are narrower than the requested equivalent clearance diameter and can still contain small isolated safe fragments.
+```text
+row_axis_direction: [0.9626245859468401, 0.2708392632737631]
+row_cross_span: [-47.0, 514.5]
 
-The schema-v1 `boundary_source` field describes the nearest non-free source at one selected safe boundary cell. It must not be interpreted as the dominant cause of the full transition zone. Schema-v2 separates this into `boundary_nearest_source` and `transition.dominant_source`, and also records `aisle_width_m`, `required_diameter_m`, `width_clearance_eligible`, and `row_core_fraction`. A schema-v2 real-data replay is required before transition-source counts are frozen as measured results.
+O01: row_axis_alignment=1.000 cross_row_overlap=0.000 entry_outward=0.000 exit_outward=0.001
+O02: row_axis_alignment=1.000 cross_row_overlap=0.000 entry_outward=0.000 exit_outward=0.001
+O03: row_axis_alignment=1.000 cross_row_overlap=0.000 entry_outward=0.000 exit_outward=0.002
+```
 
-Current P1-C conclusion:
+P1-D2 conclusion:
 
-1. the 0.20 m result separates width-limited A01/A07 from exit-truncated A03/A12/A14;
-2. at 0.25 m, A06 joins the width-limited set and A10 develops a 2.51 m exit transition;
-3. A14 is highly clearance-sensitive, with its retained core shrinking from about 84% to about 42% of the recovered aisle length;
-4. the row/headland or row/open-area interface must therefore be represented explicitly rather than forcing the full recovered rectangle to be one homogeneous in-aisle planning domain;
-5. no static map cells were edited to obtain these handoff results.
+All three regions are row-parallel wide open bands, not cross-row endpoint areas. The hypothesis `wide row-aligned band == headland` is rejected for this dataset. The regions remain `wide_open_area_candidate` and are excluded from headland promotion.
 
-Output roots:
+### P1-D3 Endpoint-side evidence envelope
+
+The endpoint envelope is derived from the 15 width-eligible rows rather than from O01/O02/O03.
+
+Measured `radius=0.20 m` evidence:
+
+| metric | entry | exit |
+| --- | ---: | ---: |
+| strict cross-row coverage | 0.019 | 0.017 |
+| strict endpoint median distance | 7.487 m | 7.469 m |
+| strict max outward depth | 0.191 m | 0.153 m |
+| relaxed cross-row coverage | 1.000 | 1.000 |
+| relaxed endpoint median distance | 0.375 m | 0.363 m |
+| relaxed max outward depth | 10.205 m | 8.370 m |
+| relaxed unknown fraction | 0.998 | 0.997 |
+| coverage gain | 0.981 | 0.983 |
+| endpoint distance reduction | 7.113 m | 7.106 m |
+| outward depth gain | 10.013 m | 8.217 m |
+| relaxed observed fraction | 0.002 | 0.003 |
+
+The full JSON records more precise unknown fractions of approximately 0.99799 at entry and 0.99664 at exit.
+
+Interpretation:
+
+`relaxed_unknown_allowed` is a non-hard connectivity upper bound, not observed free space. Coverage rises from about 2% to about 100% only because the relaxed envelope is more than 99.6% unknown. Therefore:
+
+```text
+not hard != observed free != navigable
+```
+
+P1-D3 conclusion:
+
+The common endpoint-side geometry is plausible, but the LIO-only PCD does not contain enough observed-free evidence to recover a trustworthy headland. The correct result is `HEADLAND NOT RECOVERED: insufficient observation evidence`, not semantic promotion of unknown space.
+
+### P1-E0 Trajectory-aware observation evidence
+
+Status: implementation complete; real rosbag/trajectory-ray replay pending.
+
+Motivation:
+
+An aggregate PCD keeps return coordinates but loses the sensor origin of each return. P1-E restores line-of-sight provenance instead of filling unknown space morphologically.
+
+Frozen ray bundle contract:
+
+```text
+observation_rays.npz
+├── schema_version = 1
+├── frame_id
+├── ray_origin_xyz_m      (N,3)
+├── ray_endpoint_xyz_m    (N,3)
+├── timestamp_s           (optional N)
+└── scan_index            (optional N)
+```
+
+Implementation:
+
+```text
+src/agt_map_reconstruction/maps/observation_ray_bundle.py
+src/agt_map_reconstruction/maps/ground_reference_plane.py
+src/agt_map_reconstruction/maps/ground_aware_ray_evidence.py
+tools/fit_ground_reference_plane.py
+tools/build_ground_aware_ray_evidence.py
+docs/interfaces/observation_ray_bundle.md
+```
+
+Important separation:
+
+- the P1-A semantic `ground_surface.npy` is NaN in unknown cells by design;
+- P1-E therefore fits an explicit affine geometry-only `ground_reference.npy` from finite ground-model support;
+- affine residual RMSE / median / p95 / max are reported before the reference is used;
+- extrapolated ground-reference values are not free-space evidence;
+- a 3D ray supports a cell only when its in-cell segment lies in an explicitly configured low-height band above the ground reference;
+- the return/hit cell is never marked free;
+- output is `ray_free_support_count.npy` and `ray_free_support_mask.npy` only;
+- `semantic_promotion=false` remains mandatory for P1-E0.
+
+No paper parameter is frozen yet for the low-height band or minimum ray support count. Those values are explicit CLI inputs and require real-ray sensitivity analysis.
+
+P1-E acceptance question:
+
+Does trajectory-aware ray evidence materially increase strict observed-free endpoint coverage and reduce endpoint distance relative to the frozen P1-D3 PCD-only baseline without promoting unsupported high-canopy rays or hard obstacles?
+
+### P1 freeze boundary
+
+P1-A through P1-D are frozen. Do not change the PGM, candidate policy, row classifier, aisle denominator, or handoff definitions to improve headland appearance. New progress must come from additional observation provenance or new measured data, then be evaluated against the same D3 endpoint metrics.
+
+Primary output roots:
 
 ```text
 results/P1/greenhouse_01_region_split/
 ├── navigation/
 ├── diagnostics/
-└── handoffs/
+├── handoffs/
+└── topology/
     ├── r020/
-    └── r025/
+    ├── headland_geometry_audit/
+    ├── endpoint_envelope_r020/
+    └── endpoint_envelope_r020_evidence_gap/
 ```
