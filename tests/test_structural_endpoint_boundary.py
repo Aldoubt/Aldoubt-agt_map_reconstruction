@@ -112,11 +112,14 @@ def test_fit_reports_insufficient_candidates_without_fabricating_boundary():
 
 
 def test_high_rmse_fit_is_rejected_even_when_mad_gate_keeps_all_points():
+    # Both sides are deliberately irregular, but not dominated by a single
+    # isolated outlier.  The robust MAD gate therefore retains all four points,
+    # after which the explicit RMSE quality gate must reject the fitted line.
     records = [
-        _record("A01", 10, 10.0, 40.0),
-        _record("A02", 20, 18.0, 28.0),
-        _record("A03", 30, 6.0, 52.0),
-        _record("A04", 40, 20.0, 25.0),
+        _record("A01", 10, 10.0, 36.0),
+        _record("A02", 20, 18.0, 57.0),
+        _record("A03", 30, 6.0, 58.0),
+        _record("A04", 40, 20.0, 44.0),
     ]
 
     result = fit_structural_endpoint_boundaries(
@@ -132,5 +135,7 @@ def test_high_rmse_fit_is_rejected_even_when_mad_gate_keeps_all_points():
 
     assert result["entry"]["fit_status"] == "poor_fit_quality"
     assert result["entry"]["fit"]["residual_rmse_m"] > 0.50
+    assert result["entry"]["inlier_count"] == 4
     assert result["exit"]["fit_status"] == "poor_fit_quality"
     assert result["exit"]["fit"]["residual_rmse_m"] > 0.50
+    assert result["exit"]["inlier_count"] == 4
