@@ -53,6 +53,29 @@ def _metadata_from_grid(grid):
     )
 
 
+def _transition_context_source(handoff, failure_region):
+    if failure_region == "entry":
+        transition = handoff.get("entry_transition") or {}
+    elif failure_region == "exit":
+        transition = handoff.get("exit_transition") or {}
+    else:
+        return None
+    return transition.get("dominant_source")
+
+
+def _causal_summary(blocker):
+    return {
+        "validation_pass": blocker.get("validation_pass"),
+        "failure_region": blocker.get("failure_region"),
+        "dominant_blocking_source": blocker.get("dominant_blocking_source"),
+        "disconnect_mode": blocker.get("disconnect_mode"),
+        "start_probe_safe": blocker.get("start_probe_safe"),
+        "end_probe_safe": blocker.get("end_probe_safe"),
+        "first_blocker": blocker.get("first_blocker"),
+        "longest_blocker": blocker.get("longest_blocker"),
+    }
+
+
 def main():
     args = build_parser().parse_args()
 
@@ -60,6 +83,7 @@ def main():
         estimate_aisle_handoff_boundary,
     )
     from agt_map_reconstruction.maps.local_blocker_localization import (
+        localize_clearance_blocker,
         select_unexpected_failure_targets,
     )
 
@@ -90,18 +114,43 @@ def main():
         aisle = aisle_by_label.get(label)
         if aisle is None:
             raise ValueError(f"diagnostic target is missing from aisle bundle: {label}")
-        results.append(
-            estimate_aisle_handoff_boundary(
-                base_map,
-                aisle,
-                resolution=float(metadata.resolution),
-                radius_m=float(radius),
-                metadata=metadata,
-            )
+
+        handoff = estimate_aisle_handoff_boundary(
+            base_map,
+            aisle,
+            resolution=float(metadata.resolution),
+            radius_m=float(radius),
+            metadata=metadata,
+        )
+        blocker = localize_clearance_blocker(
+            base_map,
+            aisle,
+            resolution=float(metadata.resolution),
+            radius_m=float(radius),
         )
 
+        causal = _causal_summary(blocker)
+        causal_source = causal.get("dominant_blocking_source")
+        failure_region = causal.get("failure_region")
+        context_source = _transition_context_source(handoff, failure_region)
+
+        item = dict(handoff)
+        item["causal_blocker"] = causal
+        item["entry_transition_context_source"] = (
+            (handoff.get("entry_transition") or {}).get("dominant_source")
+        )
+        item["exit_transition_context_source"] = (
+            (handoff.get("exit_transition") or {}).get("dominant_source")
+        )
+        item["causal_context_agreement"] = (
+            None
+            if causal_source in {None, "undetermined"} or context_source is None
+            else bool(causal_source == context_source)
+        )
+        results.append(item)
+
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "source_map": str(map_path),
         "source_aisles": str(aisle_path),
         "source_geometry_diagnostics": str(diagnostics_path),
@@ -111,6 +160,13 @@ def main():
             "safe_definition": "free && distance_to_nonfree >= radius",
             "component_selection": (
                 "midpoint component; fallback to largest longitudinal span"
+            ),
+            "causal_source": (
+                "P1-B local blocker localization at the same first-failure radius"
+            ),
+            "transition_context_source": (
+                "dominant nearest-source composition across the whole entry/exit "
+                "transition zone; contextual only, not causal"
             ),
             "map_editing": False,
         },
@@ -125,15 +181,16 @@ def main():
     print("output:", output)
     print("targets:", len(results))
     for item in results:
+        causal = item.get("causal_blocker") or {}
         if item.get("status") != "ok":
             print(
                 f"{item['label']}: radius={item['radius_m']:.2f} "
                 f"status={item.get('status')} "
-                f"width_eligible={item.get('width_clearance_eligible')}"
+                f"width_eligible={item.get('width_clearance_eligible')} "
+                f"causal_region={causal.get('failure_region')} "
+                f"causal_source={causal.get('dominant_blocking_source')}"
             )
             continue
-        entry_transition = item.get("entry_transition") or {}
-        exit_transition = item.get("exit_transition") or {}
         print(
             f"{item['label']}: radius={item['radius_m']:.2f} "
             f"width_eligible={item['width_clearance_eligible']} "
@@ -142,8 +199,11 @@ def main():
             f"{item['row_core_end_s_over_l']:.3f} "
             f"entry_transition_m={item['entry_transition_length_m']:.2f} "
             f"exit_transition_m={item['exit_transition_length_m']:.2f} "
-            f"entry_transition_source={entry_transition.get('dominant_source')} "
-            f"exit_transition_source={exit_transition.get('dominant_source')}"
+            f"causal_region={causal.get('failure_region')} "
+            f"causal_source={causal.get('dominant_blocking_source')} "
+            f"causal_mode={causal.get('disconnect_mode')} "
+            f"exit_context_source={item.get('exit_transition_context_source')} "
+            f"cause_context_agree={item.get('causal_context_agreement')}"
         )
 
 
