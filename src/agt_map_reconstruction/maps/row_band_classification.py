@@ -69,3 +69,54 @@ def classify_row_bands(bands, iqr_factor=1.5):
         width_outlier_threshold_m=threshold,
         iqr_factor=float(iqr_factor),
     )
+
+
+def _with_map_geometry(region, metadata):
+    item = dict(region)
+    item["coordinate_convention"] = "polygon_xy/grid_cell; map fields/metres"
+    item["polygon_map_xy_m"] = [
+        list(metadata.grid_to_world(point[0], point[1]))
+        for point in item["polygon_xy"]
+    ]
+    item["centerline_map_xy_m"] = [
+        list(metadata.grid_to_world(point[0], point[1]))
+        for point in item["centerline_xy"]
+    ]
+    return item
+
+
+def write_row_band_classification_bundle(result, metadata, path):
+    """Persist all raw row-band outcomes with explicit map-frame geometry."""
+    import json
+    from pathlib import Path
+
+    regions = [
+        _with_map_geometry(item, metadata)
+        for item in result.row_aisles + result.open_area_candidates
+    ]
+    regions.sort(key=lambda item: int(item["source_band_id"]))
+    payload = {
+        "schema_version": 1,
+        "frame_id": metadata.frame_id,
+        "grid": metadata.to_dict(),
+        "classification": {
+            "method": "upper_width_outlier_q3_plus_iqr",
+            "iqr_factor": float(result.iqr_factor),
+            "width_outlier_threshold_m": (
+                None
+                if result.width_outlier_threshold_m is None
+                else float(result.width_outlier_threshold_m)
+            ),
+            "raw_row_band_count": len(regions),
+            "row_aisle_count": len(result.row_aisles),
+            "open_area_candidate_count": len(result.open_area_candidates),
+        },
+        "regions": regions,
+    }
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(
+        json.dumps(payload, indent=2, sort_keys=False) + "\n",
+        encoding="utf-8",
+    )
+    return payload
