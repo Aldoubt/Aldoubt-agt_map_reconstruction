@@ -26,3 +26,5 @@ def test_parser_exposes_conservative_lattice_audit_contract():
     assert args.row_band_regions == "row_band_regions.json"
     assert args.output == "out"
     assert args.min_observed_slots == 4
+    assert args.duplicate_gap_ratio == 0.50
+    assert args.max_fit_residual_ratio == 0.25
