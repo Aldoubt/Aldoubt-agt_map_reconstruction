@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from dataclasses import asdict
 import json
+import math
 from pathlib import Path
 
 import numpy as np
 
 from .grid_geometry import GridMetadata
+from .ground_evidence import EvidenceClass
 from .semantic_assets import write_semantic_navigation_assets
 from .semantic_reconstruction import corridor_seed_from_evidence
 
@@ -28,16 +30,8 @@ def metadata_from_statistics(statistics):
     )
 
 
-def infer_row_direction_from_evidence(evidence, include_interpolated=True):
-    """Estimate a dominant row direction from confirmed/bridged ground support."""
-    seed = corridor_seed_from_evidence(
-        evidence, include_interpolated=include_interpolated
-    )
-    yy, xx = np.nonzero(seed)
-    if len(xx) < 2:
-        raise ValueError("cannot infer row direction from fewer than two supported cells")
-
-    points = np.column_stack((xx.astype(float), yy.astype(float)))
+def _pca_direction(x_cells, y_cells):
+    points = np.column_stack((x_cells.astype(float), y_cells.astype(float)))
     centered = points - points.mean(axis=0)
     covariance = centered.T @ centered / len(points)
     values, vectors = np.linalg.eigh(covariance)
@@ -46,6 +40,80 @@ def infer_row_direction_from_evidence(evidence, include_interpolated=True):
     if norm <= 1e-12:
         raise ValueError("cannot infer a non-zero row direction from evidence")
     return direction / norm
+
+
+def _projection_banding_score(x_cells, y_cells, angle_deg, bin_size_cells=2.0):
+    """Measure how strongly occupied evidence collapses into parallel row bands."""
+    angle = math.radians(float(angle_deg))
+    cross_row = -math.sin(angle) * x_cells + math.cos(angle) * y_cells
+    bins = np.floor((cross_row - cross_row.min()) / float(bin_size_cells)).astype(
+        np.int64
+    )
+    counts = np.bincount(bins)
+    return float(np.sum(counts.astype(np.float64) ** 2) / len(cross_row))
+
+
+def _resolve_row_axis_from_occupied_banding(evidence, pca_direction):
+    occupied_y, occupied_x = np.nonzero(
+        np.asarray(evidence) == EvidenceClass.OCCUPIED_CONFIRMED
+    )
+    if len(occupied_x) < 32:
+        return pca_direction
+
+    # Bound the angular scan cost on large maps while preserving a deterministic
+    # spatial sample of the occupied evidence.
+    max_samples = 100_000
+    if len(occupied_x) > max_samples:
+        stride = int(np.ceil(len(occupied_x) / max_samples))
+        occupied_x = occupied_x[::stride]
+        occupied_y = occupied_y[::stride]
+
+    base_angle = math.degrees(
+        math.atan2(float(pca_direction[1]), float(pca_direction[0]))
+    ) % 180.0
+    centers = (base_angle, (base_angle + 90.0) % 180.0)
+    offsets = np.arange(-15.0, 15.0 + 0.25, 0.5)
+
+    best_angle = None
+    best_score = -np.inf
+    seen = set()
+    for center in centers:
+        for offset in offsets:
+            angle = round((center + float(offset)) % 180.0, 6)
+            if angle in seen:
+                continue
+            seen.add(angle)
+            score = _projection_banding_score(
+                occupied_x,
+                occupied_y,
+                angle,
+                bin_size_cells=2.0,
+            )
+            if score > best_score:
+                best_score = score
+                best_angle = angle
+
+    angle = math.radians(float(best_angle))
+    return np.asarray([math.cos(angle), math.sin(angle)], dtype=float)
+
+
+def infer_row_direction_from_evidence(evidence, include_interpolated=True):
+    """Estimate crop-row direction while resolving the 90-degree PCA ambiguity.
+
+    Confirmed/interpolated free support provides the scene's two dominant
+    orthogonal axes. Confirmed occupied structure then selects the axis that
+    produces the strongest parallel cross-row banding. This avoids treating
+    the cross-row extent of many aisles as the crop-row direction.
+    """
+    seed = corridor_seed_from_evidence(
+        evidence, include_interpolated=include_interpolated
+    )
+    yy, xx = np.nonzero(seed)
+    if len(xx) < 2:
+        raise ValueError("cannot infer row direction from fewer than two supported cells")
+
+    pca_direction = _pca_direction(xx, yy)
+    return _resolve_row_axis_from_occupied_banding(evidence, pca_direction)
 
 
 def build_semantic_assets_from_points(
@@ -104,7 +172,7 @@ def build_semantic_assets_from_points(
             evidence_details.evidence,
             include_interpolated=include_interpolated,
         )
-        row_direction_source = "evidence_pca"
+        row_direction_source = "evidence_pca_occupied_banding"
     else:
         direction = np.asarray(row_direction, dtype=float)
         row_direction_source = "explicit"
