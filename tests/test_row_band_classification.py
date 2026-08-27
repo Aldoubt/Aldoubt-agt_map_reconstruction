@@ -1,8 +1,12 @@
+import json
+
 import numpy as np
 
+from agt_map_reconstruction.maps.grid_geometry import GridMetadata
 from agt_map_reconstruction.maps.row_band_classification import (
     classify_row_bands,
     robust_upper_width_threshold,
+    write_row_band_classification_bundle,
 )
 
 
@@ -55,3 +59,29 @@ def test_small_band_set_is_not_forced_into_outlier_classification():
     assert result.width_outlier_threshold_m is None
     assert len(result.row_aisles) == 3
     assert result.open_area_candidates == []
+
+
+def test_region_bundle_preserves_source_band_and_map_geometry(tmp_path):
+    widths = [0.40, 0.50, 0.60, 0.70, 2.50]
+    result = classify_row_bands(
+        [_band(index, width) for index, width in enumerate(widths, start=1)]
+    )
+    metadata = GridMetadata(
+        resolution=0.10,
+        origin_x=-2.0,
+        origin_y=3.0,
+        width=120,
+        height=100,
+    )
+
+    path = tmp_path / "row_band_regions.json"
+    payload = write_row_band_classification_bundle(result, metadata, path)
+
+    assert json.loads(path.read_text()) == payload
+    assert payload["classification"]["raw_row_band_count"] == 5
+    assert payload["classification"]["row_aisle_count"] == 4
+    assert payload["classification"]["open_area_candidate_count"] == 1
+    assert payload["regions"][-1]["region_class"] == "wide_open_area_candidate"
+    assert payload["regions"][-1]["source_band_label"] == "A05"
+    assert payload["regions"][-1]["label"] == "O01"
+    assert np.asarray(payload["regions"][-1]["polygon_map_xy_m"]).shape == (4, 2)
