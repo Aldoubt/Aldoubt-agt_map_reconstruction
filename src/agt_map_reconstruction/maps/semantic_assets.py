@@ -19,6 +19,8 @@ from .semantic_reconstruction import (
     semantic_labels_from_evidence,
 )
 
+AISLE_CONFLICT_POLICIES = ("hard", "candidate")
+
 
 def _normalized_direction(row_direction):
     direction = np.asarray(row_direction, dtype=float).reshape(-1)
@@ -39,17 +41,27 @@ def write_semantic_navigation_assets(
     min_width_m=0.30,
     min_length_m=2.0,
     include_interpolated=True,
+    occupied_aisle_conflict_policy="hard",
     navigation_clearance_radii_m=(0.20, 0.25, 0.30, 0.35, 0.40, 0.50),
 ):
-    """Write evidence-derived semantics plus a conservative Nav2 bundle.
+    """Write evidence-derived semantics plus a Nav2 static-map bundle.
 
-    Four-state evidence remains authoritative and is persisted unchanged.
-    Recovered aisle geometry may reinterpret only confirmed occupied evidence
-    that conflicts with a longitudinal aisle as an advisory obstacle candidate.
-    Unknown/interpolated cells are never promoted. Confirmed occupied evidence
-    outside aisle geometry remains hard, and candidate conflicts stay visible in
-    ``candidate_mask.npy`` even when the static base map uses the aisle prior.
+    ``hard`` is the conservative default: every ``OCCUPIED_CONFIRMED`` cell
+    remains a static hard obstacle. ``candidate`` is an explicit diagnostic /
+    semantic-prior experiment: only occupied evidence overlapping a recovered
+    aisle is reclassified as an advisory obstacle candidate. Candidate cells
+    inside that aisle may then be represented as free in the static base map,
+    while staying present in ``candidate_mask.npy``.
+
+    Unknown/interpolated evidence is never promoted by either policy, and
+    confirmed occupied evidence outside recovered aisles remains hard.
     """
+    if occupied_aisle_conflict_policy not in AISLE_CONFLICT_POLICIES:
+        raise ValueError(
+            "occupied_aisle_conflict_policy must be one of: "
+            + ", ".join(AISLE_CONFLICT_POLICIES)
+        )
+
     evidence = np.asarray(evidence, dtype=np.uint8)
     expected_shape = (int(metadata.height), int(metadata.width))
     if evidence.shape != expected_shape:
@@ -74,7 +86,14 @@ def write_semantic_navigation_assets(
         min_length_m=min_length_m,
     )
     aisle_prior = rasterize_aisles(aisles, evidence.shape)
-    labels = refine_occupied_evidence_with_aisle_prior(raw_labels, aisle_prior)
+
+    if occupied_aisle_conflict_policy == "candidate":
+        labels = refine_occupied_evidence_with_aisle_prior(raw_labels, aisle_prior)
+        promote_candidates_in_aisles = True
+    else:
+        labels = raw_labels
+        promote_candidates_in_aisles = False
+
     aisle_conflict_candidates = (
         (raw_labels == LABEL_OCCUPIED_CONFIRMED)
         & (labels == LABEL_OBSTACLE_CANDIDATE)
@@ -112,8 +131,10 @@ def write_semantic_navigation_assets(
             "min_width_m": float(min_width_m),
             "min_length_m": float(min_length_m),
             "promote_aisle_prior_to_static_free": False,
-            "occupied_aisle_conflict_policy": "obstacle_candidate",
-            "promote_candidates_in_aisles_to_static_free": True,
+            "occupied_aisle_conflict_policy": occupied_aisle_conflict_policy,
+            "promote_candidates_in_aisles_to_static_free": bool(
+                promote_candidates_in_aisles
+            ),
         },
         "evidence_counts": evidence_counts,
         "label_counts": {
@@ -141,7 +162,7 @@ def write_semantic_navigation_assets(
         origin=(metadata.origin_x, metadata.origin_y, metadata.origin_yaw),
         clearance_radii_m=navigation_clearance_radii_m,
         promote_aisle_prior=False,
-        promote_candidates_in_aisles=True,
+        promote_candidates_in_aisles=promote_candidates_in_aisles,
     )
     return {
         "semantic_labels": labels,

@@ -27,6 +27,16 @@ def build_parser():
         metavar=("DX", "DY"),
         help="Optional explicit row direction. If omitted, infer it from evidence.",
     )
+    parser.add_argument(
+        "--occupied-aisle-conflicts",
+        choices=("hard", "candidate"),
+        default="hard",
+        help=(
+            "How to interpret OCCUPIED_CONFIRMED cells inside recovered aisles. "
+            "Default hard preserves the conservative baseline; candidate runs an "
+            "explicit aisle-conditioned advisory-layer diagnostic."
+        ),
+    )
     return parser
 
 
@@ -100,6 +110,7 @@ def main():
         min_width_m=min_width_m,
         min_length_m=min_length_m,
         include_interpolated=include_interpolated,
+        occupied_aisle_conflict_policy=args.occupied_aisle_conflicts,
     )
 
     rebuild_manifest = {
@@ -120,6 +131,7 @@ def main():
     print("aisles:", result["manifest"]["aisle_count"])
     print("row_direction:", result["manifest"]["row_direction"])
     print("evidence_counts:", result["manifest"]["evidence_counts"])
+    print("aisle_conflict_candidates:", result["manifest"]["aisle_conflict_candidate_count"])
     print("nav2_map:", output / "navigation" / "navigation_base_map.yaml")
 
 
