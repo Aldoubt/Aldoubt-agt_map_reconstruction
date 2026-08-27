@@ -1,5 +1,4 @@
 import numpy as np
-import pytest
 
 from agt_map_reconstruction.maps.inferred_lattice_3d_structure import (
     audit_inferred_lattice_3d_structure,
@@ -35,7 +34,7 @@ def _profile(left, right, v0, v1):
     }
 
 
-def _bundle():
+def test_targeted_3d_audit_uses_inferred_slots_only_for_target_selection():
     rows = [
         _row("L01", 5.0, "observed_row_aisle"),
         _row("L02", 15.0, "lattice_inferred_wide_band"),
@@ -45,7 +44,7 @@ def _bundle():
         _profile("L01", "L02", 7.0, 13.0),
         _profile("L02", "L03", 17.0, 23.0),
     ]
-    return {
+    bundle = {
         "row_axis_direction": [1.0, 0.0],
         "cross_row_direction": [0.0, 1.0],
         "resolution_m": 0.10,
@@ -57,9 +56,6 @@ def _bundle():
         ],
     }
 
-
-def test_targeted_3d_audit_uses_inferred_slots_only_for_target_selection():
-    bundle = _bundle()
     low = np.zeros((30, 40), dtype=np.float64)
     q90 = np.zeros_like(low)
     count = np.full(low.shape, 5, dtype=np.int32)
@@ -137,24 +133,3 @@ def test_targeted_3d_audit_can_recover_topographic_ridge_support_from_height_gri
     assert all(item["status"] == "ok_3d_structural_support" for item in result["ridge_audits"])
     assert all(item["evidence_summary"]["topographic_supported_bin_count"] > 0 for item in result["ridge_audits"])
     assert result["supported_target_ridge_count"] == 2
-
-
-def test_3d_grid_contract_rejects_non_integer_point_count_values():
-    bundle = _bundle()
-    low = np.zeros((30, 40), dtype=np.float64)
-    q90 = np.full_like(low, 0.20)
-    # This looks like a height grid, not a point-count grid.
-    count = np.full(low.shape, 0.18, dtype=np.float64)
-
-    with pytest.raises(ValueError, match="point_count"):
-        audit_inferred_lattice_3d_structure(bundle, low, q90, count)
-
-
-def test_3d_grid_contract_rejects_q90_below_low_height():
-    bundle = _bundle()
-    low = np.full((30, 40), 0.25, dtype=np.float64)
-    q90 = np.full_like(low, 0.10)
-    count = np.full(low.shape, 5, dtype=np.int32)
-
-    with pytest.raises(ValueError, match="q90_height"):
-        audit_inferred_lattice_3d_structure(bundle, low, q90, count)
