@@ -52,10 +52,31 @@ def _summary_row(item):
         "entry_transition_length_m": item.get("entry_transition_length_m"),
         "exit_transition_length_m": item.get("exit_transition_length_m"),
         "entry_handoff_s_over_l": entry.get("s_over_l"),
+        "entry_cross_track_offset_m": entry.get("cross_track_offset_m"),
+        "entry_clearance_m": entry.get("clearance_m"),
         "entry_boundary_source": entry.get("boundary_source"),
         "exit_handoff_s_over_l": exit_.get("s_over_l"),
+        "exit_cross_track_offset_m": exit_.get("cross_track_offset_m"),
+        "exit_clearance_m": exit_.get("clearance_m"),
         "exit_boundary_source": exit_.get("boundary_source"),
     }
+
+
+def _metadata_from_grid(grid):
+    from agt_map_reconstruction.maps.grid_geometry import GridMetadata
+
+    origin = grid.get("origin")
+    if not isinstance(origin, list) or len(origin) != 3:
+        raise ValueError("aisle grid.origin must contain [x, y, yaw]")
+    return GridMetadata(
+        resolution=float(grid["resolution"]),
+        origin_x=float(origin[0]),
+        origin_y=float(origin[1]),
+        origin_yaw=float(origin[2]),
+        width=int(grid["width"]),
+        height=int(grid["height"]),
+        frame_id=str(grid.get("frame_id", "map")),
+    )
 
 
 def main():
@@ -73,8 +94,9 @@ def main():
     base_map = _read_grid_pgm(map_path)
     aisle_payload = json.loads(aisle_path.read_text(encoding="utf-8"))
     grid = aisle_payload.get("grid", {})
-    resolution = float(grid["resolution"])
-    expected_shape = (int(grid["height"]), int(grid["width"]))
+    metadata = _metadata_from_grid(grid)
+    resolution = float(metadata.resolution)
+    expected_shape = (int(metadata.height), int(metadata.width))
     if base_map.shape != expected_shape:
         raise ValueError(
             f"map shape {base_map.shape} does not match aisle grid {expected_shape}"
@@ -87,6 +109,7 @@ def main():
             aisle,
             resolution=resolution,
             radius_m=float(args.radius),
+            metadata=metadata,
         )
         for aisle in aisles
     ]
@@ -104,12 +127,17 @@ def main():
         "schema_version": 1,
         "source_map": str(map_path),
         "source_aisles": str(aisle_path),
+        "grid": metadata.to_dict(),
         "resolution_m": resolution,
         "radius_m": float(args.radius),
         "policy": {
             "safe_definition": "free && distance_to_nonfree >= radius",
             "component_selection": (
                 "midpoint component; fallback to largest longitudinal span"
+            ),
+            "handoff_pose": (
+                "actual safe component boundary cell; maximize clearance then "
+                "minimize absolute cross-track offset"
             ),
             "map_editing": False,
         },
@@ -136,8 +164,12 @@ def main():
         "entry_transition_length_m",
         "exit_transition_length_m",
         "entry_handoff_s_over_l",
+        "entry_cross_track_offset_m",
+        "entry_clearance_m",
         "entry_boundary_source",
         "exit_handoff_s_over_l",
+        "exit_cross_track_offset_m",
+        "exit_clearance_m",
         "exit_boundary_source",
     ]
     with (output / "aisle_handoffs.csv").open(
@@ -164,6 +196,8 @@ def main():
             f"{item['row_core_end_s_over_l']:.3f} "
             f"entry_transition_m={item['entry_transition_length_m']:.2f} "
             f"exit_transition_m={item['exit_transition_length_m']:.2f} "
+            f"entry_offset_m={entry['cross_track_offset_m']:.2f} "
+            f"exit_offset_m={exit_['cross_track_offset_m']:.2f} "
             f"entry_source={entry['boundary_source']} "
             f"exit_source={exit_['boundary_source']}"
         )
