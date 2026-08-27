@@ -48,6 +48,18 @@ def _quantiles(values):
     }
 
 
+def _quantiles_by_source(ridge_points):
+    grouped = {}
+    for item in ridge_points:
+        source = str(item.get("evidence_source") or "unspecified")
+        grouped.setdefault(source, []).append(float(item["abs_residual_m"]))
+    result = {}
+    for source, values in sorted(grouped.items()):
+        summary = _quantiles(values)
+        result[source] = {"count": len(values), **summary}
+    return result
+
+
 def _profile_cross_centers(ridge_profiles):
     centers = {}
     for profile in ridge_profiles:
@@ -85,6 +97,8 @@ def _side_payload(ridge_terminations, ridge_profiles, side, axis, cross, resolut
         ridge_points.append(
             {
                 "ridge_id": ridge_id,
+                "evidence_source": str(ridge.get("evidence_source") or "unspecified"),
+                "structural_span_fraction": ridge.get("structural_span_fraction"),
                 "grid_xy": [float(xy[0]), float(xy[1])],
                 "u_cells": float(u),
                 "cross_v_cells": float(xy @ cross),
@@ -105,6 +119,7 @@ def _side_payload(ridge_terminations, ridge_profiles, side, axis, cross, resolut
             "trend_status": "insufficient_support",
             "trend": None,
             "abs_residual_m": _quantiles([]),
+            "abs_residual_m_by_evidence_source": {},
             "cross_row_span_fraction": 0.0,
             "ridge_points": [],
             "unsupported_ridge_ids": unsupported,
@@ -146,6 +161,7 @@ def _side_payload(ridge_terminations, ridge_profiles, side, axis, cross, resolut
             "center_trend_only": True,
         },
         "abs_residual_m": _quantiles(abs_residual),
+        "abs_residual_m_by_evidence_source": _quantiles_by_source(ridge_points),
         "cross_row_span_fraction": float(span_fraction),
         "ridge_points": ridge_points,
         "unsupported_ridge_ids": unsupported,
@@ -197,7 +213,7 @@ def build_structural_endpoint_uncertainty_envelope(structural_bundle):
 
     supported = sum(1 for item in ridges if item.get("status") == "ok")
     result = {
-        "schema_version": 1,
+        "schema_version": 2,
         "method": "ridge_termination_uncertainty_envelope",
         "row_axis_direction": axis.tolist(),
         "cross_row_direction": cross.tolist(),
@@ -212,6 +228,7 @@ def build_structural_endpoint_uncertainty_envelope(structural_bundle):
             "ridge_outliers_deleted": False,
             "bilateral_agreement_required_for_envelope": False,
             "side_disagreement_preserved": True,
+            "evidence_source_preserved": True,
             "center_trend_is_semantic_boundary": False,
             "automatic_acceptance": False,
             "navigation_map_modified": False,
