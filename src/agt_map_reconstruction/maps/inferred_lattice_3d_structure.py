@@ -1,12 +1,14 @@
 """Targeted 3D structural audit for geometry-only inferred lattice regions.
 
-The row lattice decides only where to inspect.  Structural support must come
-from aligned height/point-count grids.  Two complementary cues are preserved:
+The row lattice decides only where to inspect. Structural support must come
+from aligned height/point-count grids. Two complementary, aisle-relative cues
+are preserved:
 
-- topographic relief: the ridge low-height surface is elevated relative to the
-  adjacent aisle reference strips (useful for bare raised beds/ridges);
-- vertical extent: q90-low height span inside the ridge band (useful for
-  vegetation or other vertical row structure).
+- topographic relief: ridge low-height is elevated relative to adjacent aisle
+  low-height reference strips (useful for bare raised beds/ridges);
+- vertical-extent contrast: ridge q90-low extent exceeds the adjacent aisle
+  q90-low reference extent (useful for vegetation/vertical row structure while
+  rejecting canopy/roof extent that is similarly large everywhere).
 
 Neither cue promotes navigation free space or semantic labels.
 """
@@ -102,6 +104,7 @@ def _audit_profile(
     finite = np.isfinite(flat_low) & np.isfinite(flat_q90)
     count_ok = flat_count >= int(min_points_per_cell)
     valid = finite & count_ok
+    flat_vertical_extent = np.maximum(0.0, flat_q90 - flat_low)
 
     support_fraction = []
     valid_cells = []
@@ -110,6 +113,8 @@ def _audit_profile(
     reference_low_median = []
     ridge_low_median = []
     ridge_vertical_extent_median = []
+    reference_vertical_extent_median = []
+    vertical_extent_contrast_median = []
 
     ridge_v = (all_v > min(v0, v1) + 1e-12) & (all_v < max(v0, v1) - 1e-12)
     ref_v = (
@@ -126,23 +131,28 @@ def _audit_profile(
         ref_mask = in_u & ref_v & valid
         ridge_values = flat_low[ridge_mask]
         ref_values = flat_low[ref_mask]
+        ridge_vertical = flat_vertical_extent[ridge_mask]
+        ref_vertical = flat_vertical_extent[ref_mask]
         n = int(ridge_values.size)
         valid_cells.append(n)
 
-        if n == 0 or ref_values.size == 0:
+        if n == 0 or ref_values.size == 0 or ref_vertical.size == 0:
             support_fraction.append(0.0)
             topographic_count.append(0)
             vertical_count.append(0)
             reference_low_median.append(None)
             ridge_low_median.append(None)
             ridge_vertical_extent_median.append(None)
+            reference_vertical_extent_median.append(None)
+            vertical_extent_contrast_median.append(None)
             continue
 
         ref_median = float(np.median(ref_values))
-        ridge_q90 = flat_q90[ridge_mask]
-        vertical_extent = np.maximum(0.0, ridge_q90 - ridge_values)
+        ref_vertical_median = float(np.median(ref_vertical))
+        vertical_contrast = ridge_vertical - ref_vertical_median
+
         topographic = ridge_values - ref_median >= float(min_topographic_relief_m) - 1e-12
-        vertical = vertical_extent >= float(min_vertical_extent_m) - 1e-12
+        vertical = vertical_contrast >= float(min_vertical_extent_m) - 1e-12
         structural = topographic | vertical
 
         support_fraction.append(float(np.count_nonzero(structural) / n))
@@ -150,7 +160,9 @@ def _audit_profile(
         vertical_count.append(int(np.count_nonzero(vertical)))
         reference_low_median.append(ref_median)
         ridge_low_median.append(float(np.median(ridge_values)))
-        ridge_vertical_extent_median.append(float(np.median(vertical_extent)))
+        ridge_vertical_extent_median.append(float(np.median(ridge_vertical)))
+        reference_vertical_extent_median.append(ref_vertical_median)
+        vertical_extent_contrast_median.append(float(np.median(vertical_contrast)))
 
     synthetic = dict(profile)
     synthetic["hard_support_fraction"] = support_fraction
@@ -178,6 +190,8 @@ def _audit_profile(
         "bin_reference_low_height_median": reference_low_median,
         "bin_ridge_low_height_median": ridge_low_median,
         "bin_ridge_vertical_extent_median": ridge_vertical_extent_median,
+        "bin_reference_vertical_extent_median": reference_vertical_extent_median,
+        "bin_vertical_extent_contrast_median": vertical_extent_contrast_median,
         "evidence_summary": {
             "supported_bin_count": supported_bins,
             "topographic_supported_bin_count": int(np.count_nonzero(np.asarray(topographic_count) > 0)),
@@ -201,7 +215,11 @@ def audit_inferred_lattice_3d_structure(
     min_persistence_m=1.00,
     max_internal_gap_m=0.20,
 ):
-    """Audit only unsupported ridge bands adjacent to inferred lattice slots."""
+    """Audit only unsupported ridge bands adjacent to inferred lattice slots.
+
+    ``min_vertical_extent_m`` is the required ridge-minus-aisle vertical extent
+    contrast, retained under the existing argument name for CLI compatibility.
+    """
     low, q90, count = _validate_grids(low_height, q90_height, point_count)
     bundle = dict(structural_bundle)
     axis = _unit(bundle.get("row_axis_direction"))
@@ -253,8 +271,8 @@ def audit_inferred_lattice_3d_structure(
 
     supported = sum(1 for item in audits if item["status"] == "ok_3d_structural_support")
     return {
-        "schema_version": 1,
-        "method": "targeted_inferred_lattice_3d_structural_audit",
+        "schema_version": 2,
+        "method": "targeted_inferred_lattice_3d_structural_contrast_audit",
         "grid_shape_yx": list(low.shape),
         "resolution_m": resolution,
         "target_ridge_ids": target_ids,
@@ -266,7 +284,7 @@ def audit_inferred_lattice_3d_structure(
             "min_points_per_cell": int(min_points_per_cell),
             "aisle_reference_half_width_m": float(aisle_reference_half_width_m),
             "min_topographic_relief_m": float(min_topographic_relief_m),
-            "min_vertical_extent_m": float(min_vertical_extent_m),
+            "min_vertical_extent_contrast_m": float(min_vertical_extent_m),
             "min_support_fraction": float(min_support_fraction),
             "min_persistence_m": float(min_persistence_m),
             "max_internal_gap_m": float(max_internal_gap_m),
@@ -274,7 +292,9 @@ def audit_inferred_lattice_3d_structure(
         "policy": {
             "target_selection": "unsupported_ridge_adjacent_to_inferred_lattice_slot",
             "inferred_slot_supplies_3d_evidence": False,
-            "topographic_and_vertical_cues_kept_separate": True,
+            "topographic_cue_is_aisle_relative": True,
+            "vertical_extent_cue_is_aisle_relative": True,
+            "uniform_vertical_extent_rejected": True,
             "automatic_parameter_selection": False,
             "automatic_acceptance": False,
             "navigation_map_modified": False,
