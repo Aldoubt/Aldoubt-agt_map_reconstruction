@@ -19,6 +19,7 @@ def test_semantic_navigation_cli_help_does_not_require_open3d():
     assert "--pcd" in completed.stdout
     assert "--row-direction" in completed.stdout
     assert "--confirmed-free-only" in completed.stdout
+    assert "--use-q90-for-obstacles" in completed.stdout
 
 
 def test_semantic_navigation_cli_does_not_expose_unused_offline_costmap_knobs():
