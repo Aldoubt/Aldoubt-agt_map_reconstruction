@@ -22,6 +22,8 @@ def build_parser():
     parser.add_argument("--row-band-regions", required=True)
     parser.add_argument("--output", required=True)
     parser.add_argument("--min-observed-slots", type=int, default=4)
+    parser.add_argument("--duplicate-gap-ratio", type=float, default=0.50)
+    parser.add_argument("--max-fit-residual-ratio", type=float, default=0.25)
     return parser
 
 
@@ -78,6 +80,8 @@ def main():
         payload.get("regions", []),
         resolution_m=float(grid["resolution"]),
         min_observed_slots=int(args.min_observed_slots),
+        duplicate_gap_ratio=float(args.duplicate_gap_ratio),
+        max_fit_residual_ratio=float(args.max_fit_residual_ratio),
     )
     result["sources"] = {
         "map": str(map_path),
@@ -99,18 +103,25 @@ def main():
         cv2.fillPoly(overlay, [polygon], (160, 80, 160))
     image = cv2.addWeighted(overlay, 0.20, image, 0.80, 0.0)
 
+    # Raw observed row-band centerlines stay faint so split fragments remain visible.
     for region in regions:
         region_class = region.get("region_class")
         if region_class == "wide_open_area_candidate":
             _draw_polyline(image, region["polygon_xy"], (180, 40, 180), 2)
         elif region_class == "row_aisle":
-            _draw_centerline(image, region["centerline_xy"], (0, 180, 0), 1)
+            _draw_centerline(image, region["centerline_xy"], (0, 120, 0), 1)
 
     for slot in result.get("slots", []):
-        if slot["source"] == "observed_row_aisle":
+        source = slot["source"]
+        if source == "observed_row_aisle":
             color = (0, 210, 0)
             thickness = 2
             text = slot.get("source_band_label") or slot["slot_id"]
+        elif source == "observed_split_group":
+            color = (0, 220, 220)
+            thickness = 3
+            labels = "+".join(slot.get("source_band_labels", []))
+            text = f"{slot['slot_id']}<{labels}"
         else:
             color = (255, 220, 0)
             thickness = 3
@@ -121,10 +132,11 @@ def main():
 
     # Add legend after vertical flip so text remains upright.
     display = np.flipud(image).copy()
-    cv2.rectangle(display, (8, 8), (370, 88), (30, 30, 30), -1)
-    cv2.putText(display, "green: observed row aisle", (18, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 210, 0), 1, cv2.LINE_AA)
-    cv2.putText(display, "cyan: inferred lattice slot (geometry only)", (18, 52), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 220, 0), 1, cv2.LINE_AA)
-    cv2.putText(display, "purple: original wide-open candidate", (18, 74), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (180, 40, 180), 1, cv2.LINE_AA)
+    cv2.rectangle(display, (8, 8), (430, 110), (30, 30, 30), -1)
+    cv2.putText(display, "green: fitted observed lattice slot", (18, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 210, 0), 1, cv2.LINE_AA)
+    cv2.putText(display, "yellow: split observed bands -> one slot", (18, 52), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (0, 220, 220), 1, cv2.LINE_AA)
+    cv2.putText(display, "cyan: inferred lattice slot (geometry only)", (18, 74), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 220, 0), 1, cv2.LINE_AA)
+    cv2.putText(display, "purple: original wide-open candidate", (18, 96), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (180, 40, 180), 1, cv2.LINE_AA)
     cv2.imwrite(str(output / "row_lattice_context.png"), display)
 
     row_count = sum(1 for region in regions if region.get("region_class") == "row_aisle")
@@ -141,11 +153,24 @@ def main():
     print("status:", result["status"])
     print("source_row_aisles:", row_count)
     print("source_wide_open_candidates:", wide_count)
+    print("observed_bands:", result.get("observed_band_count", row_count))
     print("observed_slots:", result.get("observed_slot_count", row_count))
+    print("duplicate_observed_bands:", result.get("duplicate_observed_band_count", 0))
+    if result.get("duplicate_observed_groups"):
+        print("duplicate_observed_groups:")
+        for group in result["duplicate_observed_groups"]:
+            labels = "+".join(group.get("source_band_labels", []))
+            print(
+                f"  {group['lattice_index']}: {labels} "
+                f"span_m={group['cross_span_m']:.6f}"
+            )
     print("inferred_slots:", result.get("inferred_slot_count", 0))
     if result.get("nominal_pitch_m") is not None:
         print(f"nominal_pitch_m: {result['nominal_pitch_m']:.6f}")
         print(f"nominal_aisle_width_m: {result['nominal_aisle_width_m']:.6f}")
+    if result.get("fit_rmse_m") is not None:
+        print(f"fit_rmse_m: {result['fit_rmse_m']:.6f}")
+        print(f"fit_max_abs_residual_m: {result['fit_max_abs_residual_m']:.6f}")
     print("inferred_slots_by_parent:", parents)
     print("automatic_parameter_selection: false")
     print("automatic_acceptance: false")
