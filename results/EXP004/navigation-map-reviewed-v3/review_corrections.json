@@ -1,0 +1,254 @@
+{
+  "changes": [
+    {
+      "label": "A01",
+      "change": "clip_to_scene_boundary"
+    },
+    {
+      "label": "A02",
+      "change": "clip_to_scene_boundary"
+    },
+    {
+      "label": "A02",
+      "change": "promote_reviewed_aisle_nonhard_to_free"
+    },
+    {
+      "label": "A02",
+      "change": "clear_reviewed_false_labels",
+      "labels": [
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
+    },
+    {
+      "label": "A03",
+      "change": "promote_reviewed_aisle_nonhard_to_free"
+    },
+    {
+      "label": "A03",
+      "change": "clear_reviewed_false_labels",
+      "labels": [
+        2,
+        3,
+        4,
+        5
+      ]
+    },
+    {
+      "label": "A03",
+      "change": "remove_reviewed_false_ridge"
+    },
+    {
+      "label": "A04",
+      "change": "promote_reviewed_aisle_nonhard_to_free"
+    },
+    {
+      "label": "A05",
+      "change": "promote_reviewed_aisle_nonhard_to_free"
+    },
+    {
+      "label": "A07",
+      "change": "clip_to_scene_boundary"
+    },
+    {
+      "label": "A07",
+      "change": "promote_reviewed_aisle_nonhard_to_free"
+    },
+    {
+      "label": "A08",
+      "change": "promote_reviewed_aisle_nonhard_to_free"
+    },
+    {
+      "label": "A09",
+      "change": "clip_to_scene_boundary"
+    },
+    {
+      "label": "A09",
+      "change": "promote_reviewed_aisle_nonhard_to_free"
+    },
+    {
+      "label": "A10",
+      "change": "clip_to_scene_boundary"
+    },
+    {
+      "label": "A10",
+      "change": "promote_reviewed_aisle_nonhard_to_free"
+    },
+    {
+      "label": "A11",
+      "change": "promote_reviewed_aisle_nonhard_to_free"
+    },
+    {
+      "label": "A12",
+      "change": "promote_reviewed_aisle_nonhard_to_free"
+    },
+    {
+      "label": "A13",
+      "change": "clip_to_scene_boundary"
+    },
+    {
+      "label": "A13",
+      "change": "promote_reviewed_aisle_nonhard_to_free"
+    },
+    {
+      "label": "A13",
+      "change": "clear_reviewed_false_labels",
+      "labels": [
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
+    },
+    {
+      "label": "A14",
+      "change": "promote_reviewed_aisle_nonhard_to_free"
+    },
+    {
+      "label": "A15",
+      "change": "clip_to_scene_boundary"
+    },
+    {
+      "label": "A15",
+      "change": "promote_reviewed_aisle_nonhard_to_free"
+    },
+    {
+      "label": "A15",
+      "change": "clear_reviewed_false_labels",
+      "labels": [
+        2,
+        3,
+        4,
+        5,
+        6
+      ]
+    },
+    {
+      "label": "A16",
+      "change": "promote_reviewed_aisle_nonhard_to_free"
+    },
+    {
+      "label": "A17",
+      "change": "clip_to_scene_boundary"
+    },
+    {
+      "label": "A17",
+      "change": "promote_reviewed_aisle_nonhard_to_free"
+    },
+    {
+      "label": "A17",
+      "change": "clear_reviewed_false_labels",
+      "labels": [
+        5,
+        6
+      ]
+    },
+    {
+      "label": "A18",
+      "change": "clip_to_scene_boundary"
+    },
+    {
+      "label": "A18",
+      "change": "promote_reviewed_aisle_nonhard_to_free"
+    },
+    {
+      "label": "A18",
+      "change": "clear_reviewed_false_labels",
+      "labels": [
+        6
+      ]
+    },
+    {
+      "label": "A20",
+      "change": "clip_to_scene_boundary"
+    },
+    {
+      "label": "A20",
+      "change": "promote_reviewed_aisle_nonhard_to_free"
+    },
+    {
+      "label": "R01",
+      "change": "clip_ridge_to_scene_boundary"
+    },
+    {
+      "label": "R02",
+      "change": "clip_ridge_to_scene_boundary"
+    },
+    {
+      "label": "R03",
+      "change": "clip_ridge_to_scene_boundary"
+    },
+    {
+      "label": "R04",
+      "change": "clip_ridge_to_scene_boundary"
+    },
+    {
+      "label": "R05",
+      "change": "clip_ridge_to_scene_boundary"
+    },
+    {
+      "label": "R06",
+      "change": "clip_ridge_to_scene_boundary"
+    },
+    {
+      "label": "R07",
+      "change": "clip_ridge_to_scene_boundary"
+    },
+    {
+      "label": "R08",
+      "change": "clip_ridge_to_scene_boundary"
+    },
+    {
+      "label": "R09",
+      "change": "clip_ridge_to_scene_boundary"
+    },
+    {
+      "label": "R10",
+      "change": "clip_ridge_to_scene_boundary"
+    },
+    {
+      "label": "R11",
+      "change": "clip_ridge_to_scene_boundary"
+    },
+    {
+      "label": "R12",
+      "change": "clip_ridge_to_scene_boundary"
+    },
+    {
+      "label": "R13",
+      "change": "clip_ridge_to_scene_boundary"
+    },
+    {
+      "label": "R14",
+      "change": "clip_ridge_to_scene_boundary"
+    },
+    {
+      "label": "R15",
+      "change": "clip_ridge_to_scene_boundary"
+    },
+    {
+      "label": "R16",
+      "change": "clip_ridge_to_scene_boundary"
+    },
+    {
+      "label": "R17",
+      "change": "clip_ridge_to_scene_boundary"
+    },
+    {
+      "label": "R18",
+      "change": "clip_ridge_to_scene_boundary"
+    },
+    {
+      "label": "R19",
+      "change": "clip_ridge_to_scene_boundary"
+    },
+    {
+      "label": "R20",
+      "change": "clip_ridge_to_scene_boundary"
+    }
+  ]
+}

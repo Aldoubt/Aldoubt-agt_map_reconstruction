@@ -1,0 +1,340 @@
+{
+  "aisles": [
+    {
+      "aisle_id": 1,
+      "clearance_pass": {
+        "0.20": true,
+        "0.25": true,
+        "0.30": true,
+        "0.35": false,
+        "0.40": false,
+        "0.50": false
+      },
+      "label": "A01",
+      "length_m": 29.899667221297832,
+      "width_m": 0.9
+    },
+    {
+      "aisle_id": 2,
+      "clearance_pass": {
+        "0.20": true,
+        "0.25": true,
+        "0.30": true,
+        "0.35": true,
+        "0.40": true,
+        "0.50": true
+      },
+      "label": "A02",
+      "length_m": 30.149752066115706,
+      "width_m": 1.35
+    },
+    {
+      "aisle_id": 3,
+      "clearance_pass": {
+        "0.20": true,
+        "0.25": true,
+        "0.30": true,
+        "0.35": false,
+        "0.40": false,
+        "0.50": false
+      },
+      "label": "A03",
+      "length_m": 30.25,
+      "width_m": 0.7000000000000001
+    },
+    {
+      "aisle_id": 4,
+      "clearance_pass": {
+        "0.20": true,
+        "0.25": true,
+        "0.30": true,
+        "0.35": true,
+        "0.40": true,
+        "0.50": true
+      },
+      "label": "A04",
+      "length_m": 30.3,
+      "width_m": 1.2000000000000002
+    },
+    {
+      "aisle_id": 5,
+      "clearance_pass": {
+        "0.20": true,
+        "0.25": true,
+        "0.30": true,
+        "0.35": true,
+        "0.40": true,
+        "0.50": true
+      },
+      "label": "A05",
+      "length_m": 30.200000000000003,
+      "width_m": 1.35
+    },
+    {
+      "aisle_id": 6,
+      "clearance_pass": {
+        "0.20": true,
+        "0.25": true,
+        "0.30": true,
+        "0.35": false,
+        "0.40": false,
+        "0.50": false
+      },
+      "label": "A06",
+      "length_m": 30.200000000000003,
+      "width_m": 1.6
+    },
+    {
+      "aisle_id": 7,
+      "clearance_pass": {
+        "0.20": true,
+        "0.25": true,
+        "0.30": true,
+        "0.35": true,
+        "0.40": true,
+        "0.50": true
+      },
+      "label": "A07",
+      "length_m": 30.34983552631579,
+      "width_m": 1.4000000000000001
+    },
+    {
+      "aisle_id": 8,
+      "clearance_pass": {
+        "0.20": true,
+        "0.25": true,
+        "0.30": true,
+        "0.35": true,
+        "0.40": true,
+        "0.50": true
+      },
+      "label": "A08",
+      "length_m": 30.3,
+      "width_m": 1.4500000000000002
+    },
+    {
+      "aisle_id": 9,
+      "clearance_pass": {
+        "0.20": true,
+        "0.25": true,
+        "0.30": true,
+        "0.35": true,
+        "0.40": true,
+        "0.50": false
+      },
+      "label": "A09",
+      "length_m": 30.400000000000002,
+      "width_m": 1.35
+    },
+    {
+      "aisle_id": 10,
+      "clearance_pass": {
+        "0.20": true,
+        "0.25": true,
+        "0.30": true,
+        "0.35": true,
+        "0.40": true,
+        "0.50": true
+      },
+      "label": "A10",
+      "length_m": 30.5,
+      "width_m": 1.4500000000000002
+    },
+    {
+      "aisle_id": 11,
+      "clearance_pass": {
+        "0.20": true,
+        "0.25": true,
+        "0.30": true,
+        "0.35": true,
+        "0.40": true,
+        "0.50": true
+      },
+      "label": "A11",
+      "length_m": 30.150000000000002,
+      "width_m": 1.6500000000000001
+    },
+    {
+      "aisle_id": 12,
+      "clearance_pass": {
+        "0.20": true,
+        "0.25": true,
+        "0.30": true,
+        "0.35": true,
+        "0.40": true,
+        "0.50": true
+      },
+      "label": "A12",
+      "length_m": 30.25,
+      "width_m": 1.35
+    },
+    {
+      "aisle_id": 13,
+      "clearance_pass": {
+        "0.20": true,
+        "0.25": true,
+        "0.30": true,
+        "0.35": true,
+        "0.40": true,
+        "0.50": true
+      },
+      "label": "A13",
+      "length_m": 30.449917898193753,
+      "width_m": 1.5
+    },
+    {
+      "aisle_id": 14,
+      "clearance_pass": {
+        "0.20": true,
+        "0.25": true,
+        "0.30": true,
+        "0.35": true,
+        "0.40": true,
+        "0.50": true
+      },
+      "label": "A14",
+      "length_m": 30.25,
+      "width_m": 1.5
+    },
+    {
+      "aisle_id": 15,
+      "clearance_pass": {
+        "0.20": true,
+        "0.25": true,
+        "0.30": true,
+        "0.35": true,
+        "0.40": true,
+        "0.50": true
+      },
+      "label": "A15",
+      "length_m": 30.399835796387514,
+      "width_m": 1.4500000000000002
+    },
+    {
+      "aisle_id": 16,
+      "clearance_pass": {
+        "0.20": true,
+        "0.25": true,
+        "0.30": true,
+        "0.35": true,
+        "0.40": true,
+        "0.50": true
+      },
+      "label": "A16",
+      "length_m": 30.35,
+      "width_m": 2.5
+    },
+    {
+      "aisle_id": 17,
+      "clearance_pass": {
+        "0.20": true,
+        "0.25": true,
+        "0.30": true,
+        "0.35": true,
+        "0.40": true,
+        "0.50": false
+      },
+      "label": "A17",
+      "length_m": 30.249834983498353,
+      "width_m": 1.55
+    },
+    {
+      "aisle_id": 18,
+      "clearance_pass": {
+        "0.20": true,
+        "0.25": true,
+        "0.30": true,
+        "0.35": false,
+        "0.40": false,
+        "0.50": false
+      },
+      "label": "A18",
+      "length_m": 30.349917627677105,
+      "width_m": 1.5
+    },
+    {
+      "aisle_id": 19,
+      "clearance_pass": {
+        "0.20": true,
+        "0.25": true,
+        "0.30": true,
+        "0.35": true,
+        "0.40": true,
+        "0.50": true
+      },
+      "label": "A19",
+      "length_m": 30.35,
+      "width_m": 1.55
+    },
+    {
+      "aisle_id": 20,
+      "clearance_pass": {
+        "0.20": true,
+        "0.25": true,
+        "0.30": true,
+        "0.35": true,
+        "0.40": true,
+        "0.50": true
+      },
+      "label": "A20",
+      "length_m": 30.19958881578948,
+      "width_m": 1.85
+    }
+  ],
+  "candidate_cell_count": 1999,
+  "clearance_tests": {
+    "0.20": {
+      "diameter_m": 0.4,
+      "pass_count": 20,
+      "radius_m": 0.2,
+      "total_aisles": 20
+    },
+    "0.25": {
+      "diameter_m": 0.5,
+      "pass_count": 20,
+      "radius_m": 0.25,
+      "total_aisles": 20
+    },
+    "0.30": {
+      "diameter_m": 0.6,
+      "pass_count": 20,
+      "radius_m": 0.3,
+      "total_aisles": 20
+    },
+    "0.35": {
+      "diameter_m": 0.7,
+      "pass_count": 16,
+      "radius_m": 0.35,
+      "total_aisles": 20
+    },
+    "0.40": {
+      "diameter_m": 0.8,
+      "pass_count": 16,
+      "radius_m": 0.4,
+      "total_aisles": 20
+    },
+    "0.50": {
+      "diameter_m": 1.0,
+      "pass_count": 14,
+      "radius_m": 0.5,
+      "total_aisles": 20
+    }
+  },
+  "free_cell_count": 352627,
+  "gray_semantics_valid": true,
+  "hard_obstacle_as_free_cell_count": 0,
+  "hard_obstacle_cell_count": 77654,
+  "map_server_yaml_valid": true,
+  "observed_gray_values": [
+    0,
+    205,
+    254
+  ],
+  "occupied_cell_count": 77654,
+  "pillar_as_free_cell_count": 0,
+  "pillar_cell_count": 1416,
+  "resolution_m": 0.05,
+  "static_obstacle_semantics_valid": true,
+  "unexpected_gray_values": [],
+  "unknown_cell_count": 296583
+}

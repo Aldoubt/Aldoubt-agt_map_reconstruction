@@ -1,0 +1,452 @@
+{
+  "aisles": [
+    {
+      "aisle_id": 1,
+      "candidate_overlap_pose_count": 11,
+      "collision_pose_count": 15,
+      "first_failure_pose": {
+        "x_cell": 215.8426607103361,
+        "y_cell": 16.39196802733123,
+        "yaw_rad": 0.2617993877991494
+      },
+      "first_failure_reason": "unknown",
+      "heading_rad": 0.2617993877991494,
+      "label": "A01",
+      "length_m": 30.1,
+      "min_blocked_clearance_m": 0.0,
+      "out_of_bounds_pose_count": 0,
+      "passed": false,
+      "pose_count": 294,
+      "unknown_overlap_pose_count": 2,
+      "width_m": 0.9
+    },
+    {
+      "aisle_id": 2,
+      "candidate_overlap_pose_count": 0,
+      "collision_pose_count": 8,
+      "first_failure_pose": {
+        "x_cell": 207.4310417445042,
+        "y_cell": 47.784557381725946,
+        "yaw_rad": 0.26179938779914946
+      },
+      "first_failure_reason": "occupied",
+      "heading_rad": 0.26179938779914946,
+      "label": "A02",
+      "length_m": 30.3,
+      "min_blocked_clearance_m": 0.0,
+      "out_of_bounds_pose_count": 0,
+      "passed": false,
+      "pose_count": 296,
+      "unknown_overlap_pose_count": 0,
+      "width_m": 1.35
+    },
+    {
+      "aisle_id": 3,
+      "candidate_overlap_pose_count": 10,
+      "collision_pose_count": 0,
+      "first_failure_pose": {
+        "x_cell": 237.85745074423997,
+        "y_cell": 88.54848878470183,
+        "yaw_rad": 0.26179938779914946
+      },
+      "first_failure_reason": "unknown",
+      "heading_rad": 0.26179938779914946,
+      "label": "A03",
+      "length_m": 30.25,
+      "min_blocked_clearance_m": 0.0,
+      "out_of_bounds_pose_count": 0,
+      "passed": false,
+      "pose_count": 295,
+      "unknown_overlap_pose_count": 9,
+      "width_m": 0.7000000000000001
+    },
+    {
+      "aisle_id": 4,
+      "candidate_overlap_pose_count": 16,
+      "collision_pose_count": 1,
+      "first_failure_pose": {
+        "x_cell": 185.69953314158323,
+        "y_cell": 121.16024500263462,
+        "yaw_rad": 0.2617993877991494
+      },
+      "first_failure_reason": "unknown",
+      "heading_rad": 0.2617993877991494,
+      "label": "A04",
+      "length_m": 30.3,
+      "min_blocked_clearance_m": 0.0,
+      "out_of_bounds_pose_count": 0,
+      "passed": false,
+      "pose_count": 296,
+      "unknown_overlap_pose_count": 1,
+      "width_m": 1.2000000000000002
+    },
+    {
+      "aisle_id": 5,
+      "candidate_overlap_pose_count": 0,
+      "collision_pose_count": 23,
+      "first_failure_pose": {
+        "x_cell": 175.02789312394964,
+        "y_cell": 157.1236444433722,
+        "yaw_rad": 0.2617993877991494
+      },
+      "first_failure_reason": "unknown",
+      "heading_rad": 0.2617993877991494,
+      "label": "A05",
+      "length_m": 30.200000000000003,
+      "min_blocked_clearance_m": 0.0,
+      "out_of_bounds_pose_count": 0,
+      "passed": false,
+      "pose_count": 295,
+      "unknown_overlap_pose_count": 1,
+      "width_m": 1.35
+    },
+    {
+      "aisle_id": 6,
+      "candidate_overlap_pose_count": 16,
+      "collision_pose_count": 32,
+      "first_failure_pose": {
+        "x_cell": 164.80454084240006,
+        "y_cell": 195.27771458179038,
+        "yaw_rad": 0.26179938779914946
+      },
+      "first_failure_reason": "unknown",
+      "heading_rad": 0.26179938779914946,
+      "label": "A06",
+      "length_m": 30.200000000000003,
+      "min_blocked_clearance_m": 0.0,
+      "out_of_bounds_pose_count": 0,
+      "passed": false,
+      "pose_count": 295,
+      "unknown_overlap_pose_count": 2,
+      "width_m": 1.6
+    },
+    {
+      "aisle_id": 7,
+      "candidate_overlap_pose_count": 14,
+      "collision_pose_count": 2,
+      "first_failure_pose": {
+        "x_cell": 154.00349130221522,
+        "y_cell": 231.72407693567246,
+        "yaw_rad": 0.26179938779914946
+      },
+      "first_failure_reason": "unknown",
+      "heading_rad": 0.26179938779914946,
+      "label": "A07",
+      "length_m": 30.450000000000003,
+      "min_blocked_clearance_m": 0.0,
+      "out_of_bounds_pose_count": 0,
+      "passed": false,
+      "pose_count": 297,
+      "unknown_overlap_pose_count": 1,
+      "width_m": 1.4000000000000001
+    },
+    {
+      "aisle_id": 8,
+      "candidate_overlap_pose_count": 0,
+      "collision_pose_count": 0,
+      "first_failure_pose": {
+        "x_cell": 143.0730322394791,
+        "y_cell": 268.6534022026991,
+        "yaw_rad": 0.2617993877991494
+      },
+      "first_failure_reason": "unknown",
+      "heading_rad": 0.2617993877991494,
+      "label": "A08",
+      "length_m": 30.3,
+      "min_blocked_clearance_m": 0.0,
+      "out_of_bounds_pose_count": 0,
+      "passed": false,
+      "pose_count": 296,
+      "unknown_overlap_pose_count": 1,
+      "width_m": 1.4500000000000002
+    },
+    {
+      "aisle_id": 9,
+      "candidate_overlap_pose_count": 9,
+      "collision_pose_count": 24,
+      "first_failure_pose": {
+        "x_cell": 130.8577691369211,
+        "y_cell": 302.650274813798,
+        "yaw_rad": 0.26179938779914946
+      },
+      "first_failure_reason": "occupied",
+      "heading_rad": 0.26179938779914946,
+      "label": "A09",
+      "length_m": 30.450000000000003,
+      "min_blocked_clearance_m": 0.0,
+      "out_of_bounds_pose_count": 0,
+      "passed": false,
+      "pose_count": 297,
+      "unknown_overlap_pose_count": 1,
+      "width_m": 1.35
+    },
+    {
+      "aisle_id": 10,
+      "candidate_overlap_pose_count": 11,
+      "collision_pose_count": 3,
+      "first_failure_pose": {
+        "x_cell": 119.34961281554972,
+        "y_cell": 337.8718922962885,
+        "yaw_rad": 0.2617993877991494
+      },
+      "first_failure_reason": "occupied",
+      "heading_rad": 0.2617993877991494,
+      "label": "A10",
+      "length_m": 30.700000000000003,
+      "min_blocked_clearance_m": 0.0,
+      "out_of_bounds_pose_count": 0,
+      "passed": false,
+      "pose_count": 300,
+      "unknown_overlap_pose_count": 0,
+      "width_m": 1.4500000000000002
+    },
+    {
+      "aisle_id": 11,
+      "candidate_overlap_pose_count": 32,
+      "collision_pose_count": 18,
+      "first_failure_pose": {
+        "x_cell": 115.75833179547239,
+        "y_cell": 378.3206586635688,
+        "yaw_rad": 0.26179938779914946
+      },
+      "first_failure_reason": "unknown",
+      "heading_rad": 0.26179938779914946,
+      "label": "A11",
+      "length_m": 30.150000000000002,
+      "min_blocked_clearance_m": 0.0,
+      "out_of_bounds_pose_count": 0,
+      "passed": false,
+      "pose_count": 294,
+      "unknown_overlap_pose_count": 2,
+      "width_m": 1.6500000000000001
+    },
+    {
+      "aisle_id": 12,
+      "candidate_overlap_pose_count": 9,
+      "collision_pose_count": 0,
+      "first_failure_pose": {
+        "x_cell": 102.5077925125044,
+        "y_cell": 416.181234579824,
+        "yaw_rad": 0.2617993877991494
+      },
+      "first_failure_reason": "unknown",
+      "heading_rad": 0.2617993877991494,
+      "label": "A12",
+      "length_m": 30.25,
+      "min_blocked_clearance_m": 0.0,
+      "out_of_bounds_pose_count": 0,
+      "passed": false,
+      "pose_count": 295,
+      "unknown_overlap_pose_count": 1,
+      "width_m": 1.35
+    },
+    {
+      "aisle_id": 13,
+      "candidate_overlap_pose_count": 30,
+      "collision_pose_count": 37,
+      "first_failure_pose": {
+        "x_cell": 92.09497153997329,
+        "y_cell": 451.17870819427253,
+        "yaw_rad": 0.2617993877991493
+      },
+      "first_failure_reason": "unknown",
+      "heading_rad": 0.2617993877991493,
+      "label": "A13",
+      "length_m": 30.5,
+      "min_blocked_clearance_m": 0.0,
+      "out_of_bounds_pose_count": 0,
+      "passed": false,
+      "pose_count": 298,
+      "unknown_overlap_pose_count": 1,
+      "width_m": 1.5
+    },
+    {
+      "aisle_id": 14,
+      "candidate_overlap_pose_count": 0,
+      "collision_pose_count": 0,
+      "first_failure_pose": null,
+      "first_failure_reason": null,
+      "heading_rad": 0.26179938779914946,
+      "label": "A14",
+      "length_m": 30.25,
+      "min_blocked_clearance_m": 0.05,
+      "out_of_bounds_pose_count": 0,
+      "passed": true,
+      "pose_count": 295,
+      "unknown_overlap_pose_count": 0,
+      "width_m": 1.5
+    },
+    {
+      "aisle_id": 15,
+      "candidate_overlap_pose_count": 0,
+      "collision_pose_count": 21,
+      "first_failure_pose": {
+        "x_cell": 465.4576351936245,
+        "y_cell": 629.3842840251624,
+        "yaw_rad": 0.26179938779914913
+      },
+      "first_failure_reason": "occupied",
+      "heading_rad": 0.26179938779914913,
+      "label": "A15",
+      "length_m": 30.5,
+      "min_blocked_clearance_m": 0.0,
+      "out_of_bounds_pose_count": 0,
+      "passed": false,
+      "pose_count": 298,
+      "unknown_overlap_pose_count": 0,
+      "width_m": 1.4500000000000002
+    },
+    {
+      "aisle_id": 16,
+      "candidate_overlap_pose_count": 118,
+      "collision_pose_count": 9,
+      "first_failure_pose": {
+        "x_cell": 269.5806121714896,
+        "y_cell": 626.074812460048,
+        "yaw_rad": 0.26179938779914924
+      },
+      "first_failure_reason": "occupied",
+      "heading_rad": 0.26179938779914924,
+      "label": "A16",
+      "length_m": 30.35,
+      "min_blocked_clearance_m": 0.0,
+      "out_of_bounds_pose_count": 0,
+      "passed": false,
+      "pose_count": 296,
+      "unknown_overlap_pose_count": 0,
+      "width_m": 2.5
+    },
+    {
+      "aisle_id": 17,
+      "candidate_overlap_pose_count": 122,
+      "collision_pose_count": 25,
+      "first_failure_pose": {
+        "x_cell": 49.639356957469104,
+        "y_cell": 617.3526254930528,
+        "yaw_rad": 0.2617993877991494
+      },
+      "first_failure_reason": "unknown",
+      "heading_rad": 0.2617993877991494,
+      "label": "A17",
+      "length_m": 30.35,
+      "min_blocked_clearance_m": 0.0,
+      "out_of_bounds_pose_count": 0,
+      "passed": false,
+      "pose_count": 296,
+      "unknown_overlap_pose_count": 1,
+      "width_m": 1.55
+    },
+    {
+      "aisle_id": 18,
+      "candidate_overlap_pose_count": 139,
+      "collision_pose_count": 28,
+      "first_failure_pose": {
+        "x_cell": 35.8111204158658,
+        "y_cell": 653.5054936247718,
+        "yaw_rad": 0.26179938779914935
+      },
+      "first_failure_reason": "occupied",
+      "heading_rad": 0.26179938779914935,
+      "label": "A18",
+      "length_m": 30.400000000000002,
+      "min_blocked_clearance_m": 0.0,
+      "out_of_bounds_pose_count": 0,
+      "passed": false,
+      "pose_count": 297,
+      "unknown_overlap_pose_count": 1,
+      "width_m": 1.5
+    },
+    {
+      "aisle_id": 19,
+      "candidate_overlap_pose_count": 80,
+      "collision_pose_count": 2,
+      "first_failure_pose": {
+        "x_cell": 26.8125130057078,
+        "y_cell": 690.9524569820034,
+        "yaw_rad": 0.2617993877991496
+      },
+      "first_failure_reason": "occupied",
+      "heading_rad": 0.2617993877991496,
+      "label": "A19",
+      "length_m": 30.35,
+      "min_blocked_clearance_m": 0.0,
+      "out_of_bounds_pose_count": 0,
+      "passed": false,
+      "pose_count": 296,
+      "unknown_overlap_pose_count": 1,
+      "width_m": 1.55
+    },
+    {
+      "aisle_id": 20,
+      "candidate_overlap_pose_count": 36,
+      "collision_pose_count": 3,
+      "first_failure_pose": {
+        "x_cell": 16.200932156504436,
+        "y_cell": 730.5554158598552,
+        "yaw_rad": 0.26179938779914946
+      },
+      "first_failure_reason": "occupied",
+      "heading_rad": 0.26179938779914946,
+      "label": "A20",
+      "length_m": 30.450000000000003,
+      "min_blocked_clearance_m": 0.0,
+      "out_of_bounds_pose_count": 0,
+      "passed": false,
+      "pose_count": 297,
+      "unknown_overlap_pose_count": 0,
+      "width_m": 1.85
+    }
+  ],
+  "footprint": {
+    "name": "mk_mini",
+    "polygon_xy_m": [
+      [
+        0.42,
+        0.3
+      ],
+      [
+        0.42,
+        -0.3
+      ],
+      [
+        -0.42,
+        -0.3
+      ],
+      [
+        -0.42,
+        0.3
+      ]
+    ]
+  },
+  "policy": {
+    "allow_unknown": false,
+    "sample_spacing_m": 0.1
+  },
+  "resolution_m": 0.05,
+  "summary": {
+    "fail_count": 19,
+    "failed_aisles": [
+      "A01",
+      "A02",
+      "A03",
+      "A04",
+      "A05",
+      "A06",
+      "A07",
+      "A08",
+      "A09",
+      "A10",
+      "A11",
+      "A12",
+      "A13",
+      "A15",
+      "A16",
+      "A17",
+      "A18",
+      "A19",
+      "A20"
+    ],
+    "pass_count": 1,
+    "total_aisles": 20
+  }
+}

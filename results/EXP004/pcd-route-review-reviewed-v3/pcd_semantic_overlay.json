@@ -1,0 +1,17 @@
+{
+  "point_count": 3645586,
+  "source": "results/pcd_cache/processed_voxel_004.npy",
+  "aisle_count": 20,
+  "ridge_count": 20,
+  "wall_count": 2,
+  "failed_aisles": [
+    "A01",
+    "A03",
+    "A06"
+  ],
+  "ground_percentile": 10.0,
+  "z_offset_m": 0.03,
+  "point_palette": "neutral",
+  "overlay_mode": "fixed",
+  "overlay_z_m": -1.2871814966201782
+}
