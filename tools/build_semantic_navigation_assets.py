@@ -30,8 +30,6 @@ def build_parser():
     parser.add_argument("--max-ground-step-m", type=float, default=0.20)
     parser.add_argument("--max-interpolation-gap-m", type=float, default=0.25)
     parser.add_argument("--obstacle-height-m", type=float, default=0.15)
-    parser.add_argument("--obstacle-inflation-radius-m", type=float, default=0.25)
-    parser.add_argument("--interpolated-ground-cost", type=int, default=64)
 
     parser.add_argument(
         "--row-direction",
@@ -74,8 +72,6 @@ def main():
         max_ground_step_m=args.max_ground_step_m,
         max_interpolation_gap_m=args.max_interpolation_gap_m,
         obstacle_height_m=args.obstacle_height_m,
-        obstacle_inflation_radius_m=args.obstacle_inflation_radius_m,
-        interpolated_ground_cost=args.interpolated_ground_cost,
     )
 
     result = build_semantic_assets_from_points(
