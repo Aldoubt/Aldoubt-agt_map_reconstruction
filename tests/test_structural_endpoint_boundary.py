@@ -32,7 +32,7 @@ def test_single_row_length_outlier_does_not_pull_common_boundary():
         _record("A02", 20, 10.1, 40.1),
         _record("A03", 30, 9.9, 39.9),
         _record("A04", 40, 10.0, 40.0),
-        _record("A05", 50, 35.0, 15.0),  # several metres wrong at 0.1 m/cell
+        _record("A05", 50, 35.0, 15.0),
     ]
 
     result = fit_structural_endpoint_boundaries(
@@ -43,6 +43,7 @@ def test_single_row_length_outlier_does_not_pull_common_boundary():
         residual_floor_m=0.30,
         mad_scale=3.0,
         min_inlier_count=3,
+        max_fit_rmse_m=0.50,
     )
 
     assert result["entry"]["fit_status"] == "ok"
@@ -76,6 +77,7 @@ def test_ambiguous_rows_are_retained_but_excluded_from_fit():
         residual_floor_m=0.30,
         mad_scale=3.0,
         min_inlier_count=3,
+        max_fit_rmse_m=0.50,
     )
 
     entry_by_label = {item["label"]: item for item in result["entry"]["rows"]}
@@ -100,9 +102,35 @@ def test_fit_reports_insufficient_candidates_without_fabricating_boundary():
         residual_floor_m=0.30,
         mad_scale=3.0,
         min_inlier_count=3,
+        max_fit_rmse_m=0.50,
     )
 
     assert result["entry"]["fit_status"] == "insufficient_candidates"
     assert result["entry"]["fit"] is None
     assert result["exit"]["fit_status"] == "insufficient_candidates"
     assert result["exit"]["fit"] is None
+
+
+def test_high_rmse_fit_is_rejected_even_when_mad_gate_keeps_all_points():
+    records = [
+        _record("A01", 10, 10.0, 40.0),
+        _record("A02", 20, 18.0, 28.0),
+        _record("A03", 30, 6.0, 52.0),
+        _record("A04", 40, 20.0, 25.0),
+    ]
+
+    result = fit_structural_endpoint_boundaries(
+        records,
+        row_axis=[1.0, 0.0],
+        cross_axis=[0.0, 1.0],
+        resolution_m=0.10,
+        residual_floor_m=0.30,
+        mad_scale=3.0,
+        min_inlier_count=3,
+        max_fit_rmse_m=0.50,
+    )
+
+    assert result["entry"]["fit_status"] == "poor_fit_quality"
+    assert result["entry"]["fit"]["residual_rmse_m"] > 0.50
+    assert result["exit"]["fit_status"] == "poor_fit_quality"
+    assert result["exit"]["fit"]["residual_rmse_m"] > 0.50
