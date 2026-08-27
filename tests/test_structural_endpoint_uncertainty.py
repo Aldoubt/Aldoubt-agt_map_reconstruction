@@ -5,7 +5,7 @@ from agt_map_reconstruction.maps.structural_endpoint_uncertainty import (
 )
 
 
-def _ridge(index, v, entry_u, exit_u, *, status="ok"):
+def _ridge(index, v, entry_u, exit_u, *, status="ok", evidence_source=None):
     if status != "ok":
         return {
             "ridge_id": f"R{index}",
@@ -16,7 +16,7 @@ def _ridge(index, v, entry_u, exit_u, *, status="ok"):
             "exit_grid_xy": None,
             "resolution_m": 0.10,
         }
-    return {
+    item = {
         "ridge_id": f"R{index}",
         "status": "ok",
         "entry_u_cells": float(entry_u),
@@ -25,6 +25,9 @@ def _ridge(index, v, entry_u, exit_u, *, status="ok"):
         "exit_grid_xy": [float(exit_u), float(v)],
         "resolution_m": 0.10,
     }
+    if evidence_source is not None:
+        item["evidence_source"] = evidence_source
+    return item
 
 
 def _profile(index, v):
@@ -113,3 +116,35 @@ def test_uncertainty_envelope_keeps_bilateral_disagreement_as_uncertainty_metada
     assert aisle["entry"]["side_disagreement_m"] == 1.20
     assert aisle["exit"]["evidence_class"] == "bilateral_agree"
     assert aisle["exit"]["side_disagreement_m"] == 0.20
+
+
+def test_uncertainty_envelope_reports_residuals_by_evidence_source():
+    bundle = {
+        "row_axis_direction": [1.0, 0.0],
+        "cross_row_direction": [0.0, 1.0],
+        "resolution_m": 0.10,
+        "ridge_profiles": [
+            _profile(1, 0.0),
+            _profile(2, 10.0),
+            _profile(3, 20.0),
+            _profile(4, 30.0),
+        ],
+        "ridge_terminations": [
+            _ridge(1, 0.0, 10.0, 70.0, evidence_source="pgm_hard"),
+            _ridge(2, 10.0, 11.0, 69.0, evidence_source="pgm_hard"),
+            _ridge(3, 20.0, 12.0, 68.0, evidence_source="pgm_hard"),
+            _ridge(4, 30.0, 22.0, 54.0, evidence_source="height_3d"),
+        ],
+        "paired_endpoints": [],
+    }
+
+    result = build_structural_endpoint_uncertainty_envelope(bundle)
+
+    entry_by_source = result["entry"]["abs_residual_m_by_evidence_source"]
+    exit_by_source = result["exit"]["abs_residual_m_by_evidence_source"]
+    assert entry_by_source["pgm_hard"]["count"] == 3
+    assert entry_by_source["height_3d"]["count"] == 1
+    assert exit_by_source["pgm_hard"]["count"] == 3
+    assert exit_by_source["height_3d"]["count"] == 1
+    assert result["entry"]["ridge_points"][-1]["evidence_source"] == "height_3d"
+    assert entry_by_source["height_3d"]["p95"] == entry_by_source["height_3d"]["max"]
