@@ -59,7 +59,32 @@ def test_uncertainty_roi_evidence_partitions_unknown_without_mutating_inputs():
     assert entry_stats["unknown_repeated_scan_support_cell_count"] == 2
     assert entry_stats["ray_supported_unknown_cell_count"] == 2
     assert entry_stats["unknown_partition_cell_count"] == entry_stats["unknown_cell_count"]
+
+    trusted_ground = (
+        entry_stats["unknown_cell_count"]
+        - entry_stats["unknown_no_ground_reference_cell_count"]
+    )
+    assert entry_stats["trusted_ground_unknown_cell_count"] == trusted_ground
+    assert np.isclose(
+        entry_stats["ground_reference_ceiling_fraction_of_unknown"],
+        trusted_ground / entry_stats["unknown_cell_count"],
+    )
+    assert entry_stats["scan_observed_unknown_cell_count"] == 3
+    assert np.isclose(
+        entry_stats["scan_observed_fraction_of_trusted_ground_unknown"],
+        3 / trusted_ground,
+    )
+    assert np.isclose(
+        entry_stats["repeated_scan_fraction_of_trusted_ground_unknown"],
+        2 / trusted_ground,
+    )
+    assert np.isclose(
+        entry_stats["ray_supported_fraction_of_trusted_ground_unknown"],
+        2 / trusted_ground,
+    )
+
     assert result["policy"]["frozen_evidence_reused"] is True
+    assert result["policy"]["ground_reference_ceiling_is_semantic_free"] is False
     assert result["policy"]["evaluation_overlay_only"] is True
     assert result["policy"]["navigation_map_modified"] is False
     assert np.array_equal(base, before)
@@ -90,4 +115,6 @@ def test_unresolved_cross_strip_is_reported_separately_not_as_conservative_roi()
     assert result["structurally_unresolved_cross"]["roi_cell_count"] == 5
     assert result["structurally_unresolved_cross"]["unknown_repeated_scan_support_cell_count"] == 5
     assert result["entry"]["conservative_outward"]["roi_cell_count"] == 0
+    assert result["entry"]["conservative_outward"]["ground_reference_ceiling_fraction_of_unknown"] is None
+    assert result["entry"]["conservative_outward"]["scan_observed_fraction_of_trusted_ground_unknown"] is None
     assert result["policy"]["unresolved_cross_strip_promoted_to_resolved"] is False
