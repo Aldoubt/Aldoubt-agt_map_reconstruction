@@ -19,7 +19,7 @@ def test_ground_aware_ray_cli_writes_diagnostic_assets(tmp_path):
     ray_path = tmp_path / "observation_rays.npz"
     write_observation_ray_bundle(ray_path, rays)
 
-    ground_path = tmp_path / "ground_surface.npy"
+    ground_path = tmp_path / "ground_reference.npy"
     np.save(ground_path, np.zeros((3, 8), dtype=float))
 
     manifest_path = tmp_path / "manifest.json"
@@ -39,7 +39,7 @@ def test_ground_aware_ray_cli_writes_diagnostic_assets(tmp_path):
         sys.executable,
         str(script),
         "--rays", str(ray_path),
-        "--ground-surface", str(ground_path),
+        "--ground-reference", str(ground_path),
         "--grid-manifest", str(manifest_path),
         "--output", str(output),
         "--min-ground-relative-height-m", "0.10",
@@ -57,6 +57,7 @@ def test_ground_aware_ray_cli_writes_diagnostic_assets(tmp_path):
     assert mask[1, 3] == 1
     assert mask[1, 5] == 0
     assert manifest["ray_policy"]["hit_cell_is_free"] is False
+    assert manifest["ray_policy"]["ground_reference_is_semantic_evidence"] is False
     assert manifest["ray_policy"]["semantic_promotion"] is False
     assert manifest["summary"]["supported_cell_count"] == 5
     assert "semantic_promotion: false" in completed.stdout
