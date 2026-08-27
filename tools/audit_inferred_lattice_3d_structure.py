@@ -40,6 +40,31 @@ def _read_pgm(path):
     return np.flipud(image).astype(np.uint8, copy=False)
 
 
+def _validate_loaded_grids(low, q90, point_count):
+    if low.ndim != 2 or q90.ndim != 2 or point_count.ndim != 2:
+        raise ValueError("low_height, q90_height, and point_count must all be 2D")
+    if low.shape != q90.shape or low.shape != point_count.shape:
+        raise ValueError(
+            f"3D grid shapes differ: low={low.shape}, q90={q90.shape}, point_count={point_count.shape}"
+        )
+
+    count = np.asarray(point_count, dtype=np.float64)
+    if not np.isfinite(count).all() or np.any(count < 0.0):
+        raise ValueError("point_count must contain finite non-negative values")
+    if not np.allclose(count, np.rint(count), atol=1e-6, rtol=0.0):
+        raise ValueError(
+            "point_count must be integer-valued; q90_height and point_count may have been swapped"
+        )
+
+    low_f = np.asarray(low, dtype=np.float64)
+    q90_f = np.asarray(q90, dtype=np.float64)
+    finite = np.isfinite(low_f) & np.isfinite(q90_f)
+    if np.any(q90_f[finite] + 1e-6 < low_f[finite]):
+        raise ValueError(
+            "q90_height is below low_height on finite cells; check the height-grid inputs"
+        )
+
+
 def main():
     args = build_parser().parse_args()
 
@@ -58,6 +83,7 @@ def main():
     low = np.load(low_path)
     q90 = np.load(q90_path)
     point_count = np.load(count_path)
+    _validate_loaded_grids(low, q90, point_count)
 
     map_path_text = (bundle.get("sources") or {}).get("map")
     if map_path_text:
