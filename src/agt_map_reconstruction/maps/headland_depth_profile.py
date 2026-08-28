@@ -56,6 +56,46 @@ def _pairwise_overlap(masks):
     return None
 
 
+def _side_reporting_envelope(
+    side,
+    *,
+    u,
+    v,
+    cross_domain,
+    uncertainty_payload,
+    resolution_m,
+    uncertainty_quantile,
+    max_outward_depth_m,
+):
+    """Return the finite side envelope used to report unresolved structure.
+
+    The envelope includes the full fused structural uncertainty band plus only
+    the explicitly configured finite outward range. It never extends through
+    the row interior merely because the ridge cross-span is unresolved.
+    """
+    geometry = _side_geometry(
+        uncertainty_payload,
+        side,
+        resolution_m,
+        uncertainty_quantile,
+    )
+    center = geometry["slope_du_dv"] * v + geometry["intercept_u"]
+    half_cells = geometry["uncertainty_half_width_cells"]
+    boundary = cross_domain & (np.abs(u - center) <= half_cells + 1e-12)
+    if side == "entry":
+        outward_depth_m = (center - half_cells - u) * float(resolution_m)
+    elif side == "exit":
+        outward_depth_m = (u - center - half_cells) * float(resolution_m)
+    else:
+        raise ValueError("side must be entry or exit")
+    finite_outward = (
+        cross_domain
+        & (outward_depth_m > 1e-12)
+        & (outward_depth_m < float(max_outward_depth_m) - 1e-12)
+    )
+    return boundary | finite_outward
+
+
 def _build_side_depth_masks(
     side,
     *,
@@ -133,7 +173,8 @@ def build_headland_depth_profile(
 
     Depth bands are finite by construction and are restricted to the frozen
     structural cross-row domain. Structurally unresolved ridge cross-spans are
-    excluded from every resolved band and emitted separately.
+    excluded from every resolved band and reported only where the finite
+    entry/exit headland evaluation itself is defined.
     """
     shape = tuple(int(v) for v in grid_shape_yx)
     if len(shape) != 2 or shape[0] <= 0 or shape[1] <= 0:
@@ -155,11 +196,11 @@ def build_headland_depth_profile(
     v = points @ cross
     cross_domain = (v >= v_min - 1e-12) & (v <= v_max + 1e-12)
 
-    unresolved_cross = np.zeros(v.shape, dtype=bool)
+    unresolved_cross_full = np.zeros(v.shape, dtype=bool)
     for lo, hi in unresolved_intervals:
-        unresolved_cross |= (v >= lo - 1e-12) & (v <= hi + 1e-12)
-    unresolved_cross &= cross_domain
-    resolved_cross = cross_domain & ~unresolved_cross
+        unresolved_cross_full |= (v >= lo - 1e-12) & (v <= hi + 1e-12)
+    unresolved_cross_full &= cross_domain
+    resolved_cross = cross_domain & ~unresolved_cross_full
 
     entry_summary, entry_masks = _build_side_depth_masks(
         "entry",
@@ -184,10 +225,35 @@ def build_headland_depth_profile(
         shape=shape,
     )
 
+    max_depth = float(edges[-1])
+    entry_report_envelope = _side_reporting_envelope(
+        "entry",
+        u=u,
+        v=v,
+        cross_domain=cross_domain,
+        uncertainty_payload=uncertainty,
+        resolution_m=resolution,
+        uncertainty_quantile=quantile,
+        max_outward_depth_m=max_depth,
+    )
+    exit_report_envelope = _side_reporting_envelope(
+        "exit",
+        u=u,
+        v=v,
+        cross_domain=cross_domain,
+        uncertainty_payload=uncertainty,
+        resolution_m=resolution,
+        uncertainty_quantile=quantile,
+        max_outward_depth_m=max_depth,
+    )
+    unresolved_cross_finite = unresolved_cross_full & (
+        entry_report_envelope | exit_report_envelope
+    )
+
     masks = {
         **entry_masks,
         **exit_masks,
-        "structurally_unresolved_cross": unresolved_cross.reshape(shape),
+        "structurally_unresolved_cross": unresolved_cross_finite.reshape(shape),
     }
     overlap = _pairwise_overlap(masks)
     if overlap is not None:
@@ -207,10 +273,15 @@ def build_headland_depth_profile(
         "row_cross_span_cells": [float(v_min), float(v_max)],
         "uncertainty_quantile": quantile,
         "depth_edges_m": edges,
-        "max_outward_depth_m": float(edges[-1]),
+        "max_outward_depth_m": max_depth,
         "unresolved_ridge_ids": unresolved_ids,
         "unresolved_ridge_count": len(unresolved_ids),
-        "structurally_unresolved_cross_cell_count": int(np.count_nonzero(unresolved_cross)),
+        "structurally_unresolved_cross_cell_count": int(
+            np.count_nonzero(unresolved_cross_finite)
+        ),
+        "structurally_unresolved_cross_full_cell_count_diagnostic": int(
+            np.count_nonzero(unresolved_cross_full)
+        ),
         "entry": entry_summary,
         "exit": exit_summary,
         "policy": {
@@ -218,6 +289,7 @@ def build_headland_depth_profile(
             "depth_zero_boundary_owned_by_uncertainty_band": True,
             "depth_bands_half_open_at_upper_edge": True,
             "finite_outward_extent_enforced": True,
+            "unresolved_cross_report_limited_to_finite_headland_extent": True,
             "physical_site_boundary_required": False,
             "hard_boundary_flood_fill_used": False,
             "unresolved_cross_strip_excluded": True,
