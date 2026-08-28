@@ -626,7 +626,7 @@ Next stage: EXP004-C Headland Handoff & Ackermann Transition
 
 ## P1 Evidence-driven Greenhouse Semantic Reconstruction
 
-Status: P1-A through P1-D replay-validated and frozen on 2026-08-27. P1-E0 ground-reference feasibility is replay-validated and frozen; P1-E1 observation-source inventory is implemented; P1-F conservative navigation handoff topology is replay-validated on 2026-08-28; Nav2 runtime smoke replay is pending.
+Status: P1-A through P1-D replay-validated and frozen on 2026-08-27. P1-E0 ground-reference feasibility is replay-validated and frozen; P1-E1 observation-source inventory is implemented; P1-F1/F2 conservative handoff topology, P1-F3 Nav2 path-scope audit, and P1-F4 UNKNOWN-clearance intervention are replay-validated and frozen on 2026-08-28.
 
 Goal:
 
@@ -968,11 +968,11 @@ Does trajectory-aware 3D ray evidence materially increase strict observed-free e
 
 ### P1-F Conservative navigation handoff topology
 
-Status: replay-validated on 2026-08-28. Map-side acceptance is frozen; Nav2 planner-only runtime replay is pending.
+Status: replay-validated and frozen on 2026-08-28. Map-side semantics, Nav2 baseline path-scope replay, and the single-variable UNKNOWN-clearance intervention are all recorded below. No map cell is changed by P1-F3 or P1-F4.
 
 Goal:
 
-Convert only explicitly trusted endpoint evidence into a conservative Nav2 map overlay, preserve the frozen baseline map semantics, and quantify whether that overlay changes robot-scale adjacent-aisle handoff topology before handing assets to the runtime planner.
+Convert only explicitly trusted endpoint evidence into a conservative Nav2 map overlay, preserve the frozen baseline map semantics, quantify whether that overlay changes robot-scale adjacent-aisle handoff topology, and then separate map-side local topology from unrestricted global planner behavior.
 
 Conservative evidence gate:
 
@@ -1124,24 +1124,180 @@ results/P1/greenhouse_01_region_split/
 
 If the local corrected gap replay directory has a different suffix, the `sources` block inside the final diagnostic JSON is authoritative; do not infer results from an older `r020` directory by name alone.
 
+#### P1-F3 Nav2 planner path-scope audit
+
+Goal:
+
+Replay the frozen pair-side requests through a planner-only Nav2 stack and distinguish local pair-domain agreement from unrestricted global detours. This stage does not alter the map, the finite headland envelope, the handoff poses, or the F1/F2 acceptance contract.
+
+Runtime baseline contract:
+
+```text
+planner: SmacPlanner2D
+allow_unknown: false
+robot_radius: 0.20 m
+track_unknown_space: true
+inflation_radius: 0.75 m
+cost_scaling_factor: 4.0
+inflate_unknown: false
+inflate_around_unknown: false
+motion stack: not started
+```
+
+The 28 directional requests comprise 22 positive requests from the 11 F1-connected pair-sides and six diagnostic negative requests from `A02-A03 exit`, `A11-A12 exit`, and `A13-A14 exit`.
+
+Baseline Nav2 replay:
+
+```text
+records:                       28
+planner_success:               26
+planner_failure:                2
+infrastructure_error:           0
+strict4_contract_mismatch:      0
+
+classification_counts:
+  positive_local_match:                22
+  negative_no_plan:                     2
+  negative_global_detour:               2
+  negative_local_clearance_mismatch:    2
+
+scope_counts:
+  pair_domain:                       24
+  global_outside_finite_headland:     2
+  no_path:                            2
+```
+
+The zero `strict4_contract_mismatch` result is the F3 contract check: the audit rebuilds the frozen F1 local domain and reproduces the frozen 4-connected topology classification without changing its definition.
+
+Important negative cases:
+
+| pair-side | Nav2 result | path / direct | scope | strict 4 | strict 8 | source-map min clearance | interpretation |
+| --- | --- | ---: | --- | --- | --- | ---: | --- |
+| A02-A03 exit | no path, both directions | 0 | no path | false | false | n/a | remains globally unplannable |
+| A11-A12 exit | local path, both directions | 6.139-6.182 m / 5.602 m, ratio 1.10 | pair domain | false | false | 0.050 m | local planner/source-clearance semantic mismatch |
+| A13-A14 exit | global path, both directions | 54.205-54.208 m / 4.738 m, ratio 11.44 | outside finite headland | false | false | 0.000 m | unrestricted global detour |
+
+`A11-A12 exit` disproves the earlier hypothesis that the mismatch can be explained only by 4-connected versus 8-connected component semantics: both strict 4- and 8-connected source-map tests remain disconnected while SmacPlanner2D finds a short local path. The path therefore exposes a costmap/clearance-semantics difference rather than a neighborhood-connectivity difference.
+
+`A13-A14 exit` does not contradict F1/F2. Approximately 90.9% of the planned path lies outside both the adjacent-pair domain and finite-headland domain, so the planner succeeds only by taking a greenhouse-scale detour rather than by completing the scoped headland transition.
+
+F3 implementation:
+
+```text
+src/agt_map_reconstruction/maps/planner_path_scope_audit.py
+tools/evaluate_planner_path_scope_audit.py
+tests/test_planner_path_scope_audit.py
+tests/test_planner_path_scope_audit_bundle.py
+```
+
+Selected map-side regression replay after F3 implementation:
+
+```text
+19 passed in 1.02s
+```
+
+Baseline output roots:
+
+```text
+results/P1/greenhouse_01_region_split/
+├── planning/nav2_headland_smoke_r020_v3/
+└── topology/planner_path_scope_audit_r020_v1/
+```
+
+#### P1-F4 Planner costmap UNKNOWN-clearance intervention
+
+Question:
+
+Does the short `A11-A12 exit` local path exist because the baseline Nav2 inflation layer blocks UNKNOWN cells themselves but does not use UNKNOWN cells as inflation seeds around nearby FREE cells?
+
+Single-variable intervention:
+
+```text
+baseline:
+  inflate_unknown: false
+  inflate_around_unknown: false
+
+P1-F4:
+  inflate_unknown: false
+  inflate_around_unknown: true
+```
+
+All other planner, map, handoff, radius, and request parameters remain unchanged. In particular, the intervention keeps `SmacPlanner2D`, `allow_unknown=false`, `robot_radius=0.20 m`, `inflation_radius=0.75 m`, the frozen map, and all 28 start/goal requests fixed.
+
+Runtime contract tests after the F4 launch/config/provenance change:
+
+```text
+17 passed in 0.23s
+```
+
+Raw planner success/failure counts remain unchanged because the global planner can reroute around a blocked local transition:
+
+```text
+records:                 28
+planner_success:         26
+planner_failure:          2
+infrastructure_error:     0
+```
+
+The F3 scope auditor applied to the F4 output gives:
+
+```text
+strict4_contract_mismatch: 0
+
+classification_counts:
+  positive_local_match:      22
+  negative_no_plan:           2
+  negative_global_detour:     4
+
+scope_counts:
+  pair_domain:                       22
+  global_outside_finite_headland:     4
+  no_path:                            2
+```
+
+Important F4 cases:
+
+| pair-side | F4 path | detour ratio | outside pair / finite | source-map min clearance | result relative to baseline |
+| --- | ---: | ---: | ---: | ---: | --- |
+| A02-A03 exit | no path, both directions | n/a | n/a | n/a | unchanged negative-no-plan |
+| A11-A12 exit | 53.831-53.848 m | 9.61 | 0.902 / 0.902 | 0.212 m | short local path removed; only global detour remains |
+| A13-A14 exit | 54.156-54.172 m | 11.43 | 0.909 / 0.909 | 0.200 m | remains global detour |
+
+The `min clearance` values in this table are source-map audit values sampled along the resulting planner path, not direct measurements of the internal Nav2 costmap inflation field.
+
+P1-F4 conclusion:
+
+Enabling `inflate_around_unknown=true` removes the short local A11-A12 transition while preserving all 22 positive local matches. The global planner then replaces that local transition with an approximately 54 m detour outside the finite headland domain. This single-variable intervention supports the conclusion that the F3 A11-A12 mismatch originates from Nav2 UNKNOWN-clearance/costmap semantics, not from an error in the frozen F1 local topology contract. Global `planner_success` alone is therefore not a valid negative-control acceptance metric for a scoped headland-transition question.
+
 P1-F conclusion:
 
-At a 0.20 m clearance radius, 11 of 26 width-eligible adjacent-aisle pair-side transitions are strictly connected in both the baseline and conservative navigation maps. Trusted entry-side free-space promotion creates no new topological connection and removes none, while still producing measurable local clearance improvement. Of the 15 remaining strict failures, 12 remain disconnected even under UNKNOWN-relaxed search inside the finite headland envelope; the other three comprise two mixed UNKNOWN/clearance bridges and one clearance-only bridge. No failure is explained by a pure UNKNOWN gap alone.
+At a 0.20 m clearance proxy, 11 of 26 width-eligible adjacent-aisle pair-side transitions are strictly connected in both the baseline and conservative navigation maps. Trusted entry-side free-space promotion creates no new topological connection and removes none, while still producing measurable local clearance improvement. Of the 15 remaining strict failures, 12 remain disconnected even under UNKNOWN-relaxed search inside the finite headland envelope; the other three comprise two mixed UNKNOWN/clearance bridges and one clearance-only bridge. No failure is explained by a pure UNKNOWN gap alone.
 
-This is the map-side stop criterion. Do not resume threshold sweeps, enlarge the headland solely to obtain more PASS cases, or modify the PGM for planner appearance. The next step is planner-side validation of the frozen assets.
+Planner replay then separates three different meanings that must not be conflated:
+
+```text
+local strict topology     -> F1/F2
+unrestricted global path -> raw Nav2 smoke result
+path scope / clearance   -> F3/F4 audit
+```
+
+All 22 requests derived from the 11 strict-positive pair-sides are local Nav2 matches in both planner costmap contracts. `A02-A03 exit` remains globally unplannable. `A13-A14 exit` is a global-detour case rather than a local topology disagreement. `A11-A12 exit` is locally plannable only under the baseline costmap contract; enabling UNKNOWN-adjacent inflation removes the local path and forces a global detour. No result requires reopening the frozen map or enlarging the finite headland envelope.
+
+This is the P1-F stop criterion. Do not resume threshold sweeps, enlarge the headland solely to obtain more PASS cases, edit the PGM for planner appearance, or redefine F1/F2 semantics to match an unrestricted planner outcome.
 
 Runtime handoff:
 
 - producer: `Aldoubt-agt_map_reconstruction`
 - consumer: `agt_navigation_runtime`
 - runtime branch: `feat/headland-planner-smoke`
-- current frozen positive planner cases: 11 pair-sides -> 22 forward/reverse requests
-- current diagnostic negative controls: 3 pair-sides (`mixed_bridge` / `clearance_only_bridge`) -> 6 forward/reverse requests
-- Nav2 planner replay result: pending; no planner success rate is claimed in this record yet.
+- frozen planner-only baseline replay: complete
+- frozen F3 scope audit: complete
+- frozen F4 UNKNOWN-clearance intervention: complete
+- next planner stage: SmacPlannerHybrid with measured vehicle footprint and measured/authoritative Ackermann kinematic limits; keep P1 map semantics immutable.
 
 ### P1 freeze boundary
 
-P1-A through P1-F map-side semantics are frozen. Do not change the PGM, candidate policy, row classifier, aisle denominator, handoff definitions, ground-reference model, conservative promotion policy, or headland topology scope to improve planner appearance. New map progress must come from additional observation provenance or new measured data and must be evaluated against the frozen diagnostics. Planner/runtime work consumes these assets without rewriting them.
+P1-A through P1-F4 map/planner-diagnostic semantics are frozen. Do not change the PGM, candidate policy, row classifier, aisle denominator, handoff definitions, ground-reference model, conservative promotion policy, headland topology scope, or F3/F4 interpretation to improve planner appearance. New map progress must come from additional observation provenance or new measured data. The next planner stage may change vehicle-model parameters and planner kinematics, but it must consume the same frozen map assets rather than rewriting them.
 
 Primary output roots:
 
@@ -1151,6 +1307,9 @@ results/P1/greenhouse_01_region_split/
 ├── navigation_conservative_v2/
 ├── diagnostics/
 ├── handoffs/
+├── planning/
+│   ├── nav2_headland_smoke_r020_v3/
+│   └── nav2_headland_smoke_r020_f4_unknown_clearance_v1/
 ├── observation/
 │   ├── ground_reference_plane/
 │   ├── local_ground_reference_k8/
@@ -1165,5 +1324,7 @@ results/P1/greenhouse_01_region_split/
     ├── endpoint_envelope_r020/
     ├── endpoint_envelope_r020_evidence_gap/
     ├── headland_handoff_connectivity_r020/
-    └── headland_gap_diagnostics_r020_v3/
+    ├── headland_gap_diagnostics_r020_v3/
+    ├── planner_path_scope_audit_r020_v1/
+    └── planner_path_scope_audit_r020_f4_unknown_clearance_v1/
 ```
