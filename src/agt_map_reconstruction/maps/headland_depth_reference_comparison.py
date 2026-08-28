@@ -57,6 +57,14 @@ def compare_headland_depth_with_unbounded(
     return {
         "schema_version": 1,
         "method": "finite_headland_depth_vs_unbounded_reference",
+        "finite_depth_metadata": {
+            "resolution_m": finite.get("resolution_m"),
+            "uncertainty_quantile": finite.get("uncertainty_quantile"),
+            "depth_edges_m": list(finite.get("depth_edges_m") or []),
+            "max_outward_depth_m": finite.get("max_outward_depth_m"),
+            "unresolved_ridge_ids": list(finite.get("unresolved_ridge_ids") or []),
+            "sources": dict(finite.get("sources") or {}),
+        },
         "entry": sides["entry"],
         "exit": sides["exit"],
         "spatial_domains_equivalent": False,
