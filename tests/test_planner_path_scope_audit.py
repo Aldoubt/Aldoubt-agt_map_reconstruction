@@ -144,6 +144,9 @@ def test_scoped_negative_can_be_explained_by_local_8_connectivity():
 def test_scoped_negative_global_detour_is_not_reported_as_topology_failure():
     shape = (40, 60)
     base = np.full(shape, 254, dtype=np.uint8)
+    # Separate the two entry anchors inside the finite pair domain, while
+    # leaving the rest of the global map available for an out-of-scope detour.
+    base[20, :26] = 205
     metadata = GridMetadata(1.0, 0.0, 0.0, shape[1], shape[0])
     detour = [(20, 15), (30, 10), (40, 10), (50, 20), (30, 30), (10, 25)]
     item = _run(
@@ -152,6 +155,8 @@ def test_scoped_negative_global_detour_is_not_reported_as_topology_failure():
         _planner_result(metadata, success=True, path_cells=detour),
     )
 
+    assert item["strict_connected_4"] is False
+    assert item["strict4_matches_frozen"] is True
     assert item["planner_success"] is True
     assert item["pair_domain_contained"] is False
     assert item["finite_headland_contained"] is False
