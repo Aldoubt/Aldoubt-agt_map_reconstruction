@@ -111,8 +111,16 @@ def test_default_depth_bands_are_finite_opposite_and_exclude_unresolved():
         masks["exit_depth_0_0p5"] & masks["structurally_unresolved_cross"]
     )
 
-    # R23 occupies 7<=cross-v<=10. It must be excluded from every resolved band.
-    assert masks["structurally_unresolved_cross"][8, 7]
+    # R23 occupies 7<=cross-v<=10. It is reported only within the finite
+    # entry/exit headland envelope, never through the full row interior.
+    assert masks["structurally_unresolved_cross"][8, 7]  # entry depth ~=2.25 m
+    assert masks["structurally_unresolved_cross"][8, 20]  # entry uncertainty band
+    assert masks["structurally_unresolved_cross"][8, 60]  # exit uncertainty band
+    assert not masks["structurally_unresolved_cross"][8, 40]  # row interior
+    assert not masks["structurally_unresolved_cross"][8, 0]  # exact entry 4 m edge
+    assert not masks["structurally_unresolved_cross"][8, 80]  # exact exit 4 m edge
+    assert result["policy"]["unresolved_cross_report_limited_to_finite_headland_extent"] is True
+
     for name, mask in masks.items():
         if name == "structurally_unresolved_cross":
             continue
