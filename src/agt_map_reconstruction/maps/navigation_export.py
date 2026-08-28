@@ -28,6 +28,7 @@ class NavigationLayers:
     hard_obstacle_mask: np.ndarray
     trusted_free_mask: np.ndarray
     uncertainty_mask: np.ndarray
+    baseline_free_mask: np.ndarray
 
 
 def rasterize_aisles(rectangles, shape):
@@ -68,22 +69,23 @@ def build_navigation_layers(
     trusted = _optional_mask('trusted_free_mask', trusted_free_mask, semantic.shape)
     uncertainty = _optional_mask('uncertainty_mask', uncertainty_mask, semantic.shape)
 
-    free = semantic == 1
+    # Reconstruct the frozen baseline first. The uncertainty mask belongs to the
+    # new headland-promotion gate; it must not erase already-established static
+    # free space, otherwise an overlay experiment changes two policies at once.
+    baseline_free = semantic == 1
     if promote_aisle_prior:
-        free |= aisle_prior
-    if trusted_free_mask is not None:
-        free |= trusted
+        baseline_free |= aisle_prior
     if promote_candidates_in_aisles:
-        free |= candidate & aisle_prior
+        baseline_free |= candidate & aisle_prior
 
-    # Uncertain geometry is never promoted to free. This intentionally also
-    # downgrades legacy semantic-free / aisle-prior cells when an explicit
-    # uncertainty mask is supplied. Hard occupied geometry is applied last.
-    free &= ~uncertainty
+    # Explicit uncertainty is a veto on *new* trusted-free promotion only.
+    # Existing baseline free cells remain unchanged. Hard occupied geometry is
+    # still applied last and therefore overrides both baseline and trusted free.
+    trusted_promotable = trusted & ~uncertainty
+    free = baseline_free | trusted_promotable
 
     base = np.full(semantic.shape, UNKNOWN_VALUE, dtype=np.uint8)
     base[free] = FREE_VALUE
-    # Explicit structural/hard labels always override any free-space source.
     base[hard] = OCCUPIED_VALUE
 
     return NavigationLayers(
@@ -93,6 +95,7 @@ def build_navigation_layers(
         hard_obstacle_mask=hard,
         trusted_free_mask=trusted,
         uncertainty_mask=uncertainty,
+        baseline_free_mask=baseline_free,
     )
 
 
@@ -228,7 +231,16 @@ def write_navigation_bundle(semantic_labels, aisle_rectangles, output_dir,
         & (layers.base_map == FREE_VALUE)
     )
     trusted_exported_free = layers.trusted_free_mask & (layers.base_map == FREE_VALUE)
+    trusted_blocked_by_uncertainty = layers.trusted_free_mask & layers.uncertainty_mask
     uncertainty_exported_free = layers.uncertainty_mask & (layers.base_map == FREE_VALUE)
+    uncertainty_baseline_free = (
+        layers.uncertainty_mask
+        & layers.baseline_free_mask
+        & (layers.base_map == FREE_VALUE)
+    )
+    uncertainty_nonbaseline_exported_free = (
+        uncertainty_exported_free & ~layers.baseline_free_mask
+    )
     validation.update({
         'map_server_yaml_valid': bool(
             map_yaml['mode'] == 'trinary'
@@ -239,10 +251,19 @@ def write_navigation_bundle(semantic_labels, aisle_rectangles, output_dir,
         'candidate_promoted_to_free_cell_count': int(promoted_candidates.sum()),
         'trusted_free_cell_count': int(layers.trusted_free_mask.sum()),
         'trusted_free_exported_as_free_cell_count': int(trusted_exported_free.sum()),
+        'trusted_free_blocked_by_uncertainty_cell_count': int(
+            trusted_blocked_by_uncertainty.sum()
+        ),
         'uncertainty_cell_count': int(layers.uncertainty_mask.sum()),
         'uncertainty_exported_as_free_cell_count': int(uncertainty_exported_free.sum()),
+        'uncertainty_baseline_free_overlap_cell_count': int(
+            uncertainty_baseline_free.sum()
+        ),
+        'uncertainty_nonbaseline_exported_as_free_cell_count': int(
+            uncertainty_nonbaseline_exported_free.sum()
+        ),
         'conservative_uncertainty_semantics_valid': bool(
-            not np.any(uncertainty_exported_free)
+            not np.any(uncertainty_nonbaseline_exported_free)
         ),
         'hard_obstacle_cell_count': int(layers.hard_obstacle_mask.sum()),
         'hard_obstacle_as_free_cell_count': int(
