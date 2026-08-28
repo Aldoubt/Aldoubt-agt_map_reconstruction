@@ -16,18 +16,18 @@ def _fused_bundle():
         "lattice_rows": [
             {
                 "label": "L1",
-                "polygon_xy": [[0, 2], [79, 2], [79, 3], [0, 3]],
-                "source_centerline_xy": [[0, 2.5], [79, 2.5]],
+                "polygon_xy": [[0, 2], [80, 2], [80, 3], [0, 3]],
+                "source_centerline_xy": [[0, 2.5], [80, 2.5]],
             },
             {
                 "label": "L2",
-                "polygon_xy": [[0, 6], [79, 6], [79, 7], [0, 7]],
-                "source_centerline_xy": [[0, 6.5], [79, 6.5]],
+                "polygon_xy": [[0, 6], [80, 6], [80, 7], [0, 7]],
+                "source_centerline_xy": [[0, 6.5], [80, 6.5]],
             },
             {
                 "label": "L3",
-                "polygon_xy": [[0, 10], [79, 10], [79, 11], [0, 11]],
-                "source_centerline_xy": [[0, 10.5], [79, 10.5]],
+                "polygon_xy": [[0, 10], [80, 10], [80, 11], [0, 11]],
+                "source_centerline_xy": [[0, 10.5], [80, 10.5]],
             },
         ],
         "ridge_profiles": [
@@ -76,7 +76,7 @@ def test_default_depth_bands_are_finite_opposite_and_exclude_unresolved():
     result, masks = build_headland_depth_profile(
         _fused_bundle(),
         _uncertainty(),
-        grid_shape_yx=(14, 80),
+        grid_shape_yx=(14, 81),
         depth_edges_m=[0.0, 0.5, 1.0, 2.0, 4.0],
         uncertainty_quantile="p95",
     )
@@ -99,9 +99,9 @@ def test_default_depth_bands_are_finite_opposite_and_exclude_unresolved():
     assert masks["entry_depth_2_4"][4, 1]
     assert not masks["entry_depth_2_4"][4, 0]
     assert not np.any(masks["entry_depth_2_4"][:, 16:])
-    # Exit 2-4 m remains finite and stops before the 4.0 m upper edge.
-    assert masks["exit_depth_2_4"][4, 73]
-    assert not masks["exit_depth_2_4"][4, 80 - 0 if False else 79] or True
+    # Exit 2-4 m is also half-open: x=79 is 3.75 m, x=80 is exactly 4.0 m.
+    assert masks["exit_depth_2_4"][4, 79]
+    assert not masks["exit_depth_2_4"][4, 80]
 
     assert not np.any(masks["entry_depth_0_0p5"] & masks["exit_depth_0_0p5"])
     assert not np.any(
@@ -123,7 +123,7 @@ def test_depth_masks_are_pairwise_disjoint_and_record_band_metadata():
     result, masks = build_headland_depth_profile(
         _fused_bundle(),
         _uncertainty(),
-        grid_shape_yx=(14, 80),
+        grid_shape_yx=(14, 81),
     )
 
     names = list(masks)
@@ -152,7 +152,7 @@ def test_bad_depth_edges_are_rejected():
             build_headland_depth_profile(
                 _fused_bundle(),
                 _uncertainty(),
-                grid_shape_yx=(14, 80),
+                grid_shape_yx=(14, 81),
                 depth_edges_m=edges,
             )
 
@@ -167,12 +167,12 @@ def test_reversed_source_centerlines_do_not_change_normalized_frozen_geometry():
     result_a, masks_a = build_headland_depth_profile(
         fused,
         _uncertainty(),
-        grid_shape_yx=(14, 80),
+        grid_shape_yx=(14, 81),
     )
     result_b, masks_b = build_headland_depth_profile(
         reversed_sources,
         _uncertainty(),
-        grid_shape_yx=(14, 80),
+        grid_shape_yx=(14, 81),
     )
 
     assert result_a["row_axis_direction"] == result_b["row_axis_direction"]
