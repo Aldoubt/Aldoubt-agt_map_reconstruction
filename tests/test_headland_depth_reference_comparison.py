@@ -85,7 +85,8 @@ def test_comparison_keeps_spatial_domains_non_equivalent_and_aggregates_by_cells
     )
     # The finite curve is retained verbatim; the aggregate is not a mean of 0.8 and 0.2.
     assert entry["finite_depth_bands"] == _finite_evidence()["entry"]["bands"]
-    assert "improvement" not in json.dumps(result).lower()
+    assert result["policy"]["fraction_difference_reported_as_improvement"] is False
+    assert "improvement_fraction" not in result
 
 
 def test_reference_comparison_cli_writes_reference_only_json(tmp_path):
