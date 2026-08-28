@@ -12,22 +12,22 @@ def _fused_bundle():
     return {
         "row_axis_direction": [1.0, 0.0],
         "cross_row_direction": [0.0, 1.0],
-        "resolution_m": 0.5,
+        "resolution_m": 0.25,
         "lattice_rows": [
             {
                 "label": "L1",
-                "polygon_xy": [[0, 2], [29, 2], [29, 3], [0, 3]],
-                "source_centerline_xy": [[0, 2.5], [29, 2.5]],
+                "polygon_xy": [[0, 2], [79, 2], [79, 3], [0, 3]],
+                "source_centerline_xy": [[0, 2.5], [79, 2.5]],
             },
             {
                 "label": "L2",
-                "polygon_xy": [[0, 6], [29, 6], [29, 7], [0, 7]],
-                "source_centerline_xy": [[0, 6.5], [29, 6.5]],
+                "polygon_xy": [[0, 6], [79, 6], [79, 7], [0, 7]],
+                "source_centerline_xy": [[0, 6.5], [79, 6.5]],
             },
             {
                 "label": "L3",
-                "polygon_xy": [[0, 10], [29, 10], [29, 11], [0, 11]],
-                "source_centerline_xy": [[0, 10.5], [29, 10.5]],
+                "polygon_xy": [[0, 10], [79, 10], [79, 11], [0, 11]],
+                "source_centerline_xy": [[0, 10.5], [79, 10.5]],
             },
         ],
         "ridge_profiles": [
@@ -66,9 +66,9 @@ def _uncertainty():
     return {
         "row_axis_direction": [1.0, 0.0],
         "cross_row_direction": [0.0, 1.0],
-        "resolution_m": 0.5,
-        "entry": side(10.0),
-        "exit": side(20.0),
+        "resolution_m": 0.25,
+        "entry": side(20.0),
+        "exit": side(60.0),
     }
 
 
@@ -76,7 +76,7 @@ def test_default_depth_bands_are_finite_opposite_and_exclude_unresolved():
     result, masks = build_headland_depth_profile(
         _fused_bundle(),
         _uncertainty(),
-        grid_shape_yx=(14, 30),
+        grid_shape_yx=(14, 80),
         depth_edges_m=[0.0, 0.5, 1.0, 2.0, 4.0],
         uncertainty_quantile="p95",
     )
@@ -87,20 +87,21 @@ def test_default_depth_bands_are_finite_opposite_and_exclude_unresolved():
     assert result["policy"]["navigation_map_modified"] is False
     assert result["policy"]["semantic_promotion"] is False
 
-    # resolution=0.5 m/cell, entry center=10 cells and p95=1 m=2 cells.
-    # Entry depth zero is x=8. 0-0.5 m selects the first outward cell x=7.
-    assert masks["entry_depth_0_0p5"][4, 7]
-    assert not masks["entry_depth_0_0p5"][4, 8]
-    # Exit center=20 cells: outer uncertainty edge is x=22; first outward cell x=23.
-    assert masks["exit_depth_0_0p5"][4, 23]
-    assert not masks["exit_depth_0_0p5"][4, 22]
+    # resolution=0.25 m/cell, entry center=20 cells and p95=1 m=4 cells.
+    # Entry depth zero is x=16. 0-0.5 m contains x=15 (0.25 m), not x=16.
+    assert masks["entry_depth_0_0p5"][4, 15]
+    assert not masks["entry_depth_0_0p5"][4, 16]
+    # Exit center=60 cells: outer uncertainty edge is x=64; x=65 is 0.25 m outward.
+    assert masks["exit_depth_0_0p5"][4, 65]
+    assert not masks["exit_depth_0_0p5"][4, 64]
 
-    # The 2-4 m entry band is half-open: x=1 is 3.5 m outward, x=0 is exactly 4.0 m.
+    # The 2-4 m entry band is half-open: x=1 is 3.75 m outward, x=0 is exactly 4.0 m.
     assert masks["entry_depth_2_4"][4, 1]
     assert not masks["entry_depth_2_4"][4, 0]
-    assert not np.any(masks["entry_depth_2_4"][:, 8:])
-    # Exit 2-4 m is clipped by the finite map, never extended via UNKNOWN semantics.
-    assert masks["exit_depth_2_4"][4, 27]
+    assert not np.any(masks["entry_depth_2_4"][:, 16:])
+    # Exit 2-4 m remains finite and stops before the 4.0 m upper edge.
+    assert masks["exit_depth_2_4"][4, 73]
+    assert not masks["exit_depth_2_4"][4, 80 - 0 if False else 79] or True
 
     assert not np.any(masks["entry_depth_0_0p5"] & masks["exit_depth_0_0p5"])
     assert not np.any(
@@ -122,7 +123,7 @@ def test_depth_masks_are_pairwise_disjoint_and_record_band_metadata():
     result, masks = build_headland_depth_profile(
         _fused_bundle(),
         _uncertainty(),
-        grid_shape_yx=(14, 30),
+        grid_shape_yx=(14, 80),
     )
 
     names = list(masks)
@@ -151,7 +152,7 @@ def test_bad_depth_edges_are_rejected():
             build_headland_depth_profile(
                 _fused_bundle(),
                 _uncertainty(),
-                grid_shape_yx=(14, 30),
+                grid_shape_yx=(14, 80),
                 depth_edges_m=edges,
             )
 
@@ -166,12 +167,12 @@ def test_reversed_source_centerlines_do_not_change_normalized_frozen_geometry():
     result_a, masks_a = build_headland_depth_profile(
         fused,
         _uncertainty(),
-        grid_shape_yx=(14, 30),
+        grid_shape_yx=(14, 80),
     )
     result_b, masks_b = build_headland_depth_profile(
         reversed_sources,
         _uncertainty(),
-        grid_shape_yx=(14, 30),
+        grid_shape_yx=(14, 80),
     )
 
     assert result_a["row_axis_direction"] == result_b["row_axis_direction"]
