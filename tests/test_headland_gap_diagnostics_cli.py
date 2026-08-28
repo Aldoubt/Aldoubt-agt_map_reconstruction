@@ -20,7 +20,7 @@ def _aisle(aisle_id, y):
     }
 
 
-def test_cli_writes_gap_diagnostics_bundle(tmp_path):
+def test_cli_reports_clarified_gap_metrics(tmp_path):
     shape = (60, 100)
     baseline = np.full(shape, 205, dtype=np.uint8)
     baseline[17:24, 20:81] = 254
@@ -115,7 +115,9 @@ def test_cli_writes_gap_diagnostics_bundle(tmp_path):
     )
     assert completed.returncode == 0, completed.stderr
     assert "safe_overlay_not_bridging: 1" in completed.stdout
-    assert "unknown_bridge_only: 1" in completed.stdout
+    assert "mixed_bridge: 1" in completed.stdout
+    assert "promoted_safe=" in completed.stdout
+    assert "baseline_new_safe=" in completed.stdout
     assert (output / "headland_gap_diagnostics.json").exists()
     assert (output / "headland_gap_diagnostics.csv").exists()
     assert (output / "headland_gap_diagnostics.png").exists()
