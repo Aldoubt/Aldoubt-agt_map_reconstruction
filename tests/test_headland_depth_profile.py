@@ -95,8 +95,9 @@ def test_default_depth_bands_are_finite_opposite_and_exclude_unresolved():
     assert masks["exit_depth_0_0p5"][4, 23]
     assert not masks["exit_depth_0_0p5"][4, 22]
 
-    # The 2-4 m entry band reaches x=0 but nothing beyond the explicit 4 m edge exists.
-    assert masks["entry_depth_2_4"][4, 0]
+    # The 2-4 m entry band is half-open: x=1 is 3.5 m outward, x=0 is exactly 4.0 m.
+    assert masks["entry_depth_2_4"][4, 1]
+    assert not masks["entry_depth_2_4"][4, 0]
     assert not np.any(masks["entry_depth_2_4"][:, 8:])
     # Exit 2-4 m is clipped by the finite map, never extended via UNKNOWN semantics.
     assert masks["exit_depth_2_4"][4, 27]
@@ -109,7 +110,7 @@ def test_default_depth_bands_are_finite_opposite_and_exclude_unresolved():
         masks["exit_depth_0_0p5"] & masks["structurally_unresolved_cross"]
     )
 
-    # R23 occupies 7<=v<=10 and must be excluded from every resolved band.
+    # R23 occupies 7<=cross-v<=10. It must be excluded from every resolved band.
     assert masks["structurally_unresolved_cross"][8, 7]
     for name, mask in masks.items():
         if name == "structurally_unresolved_cross":
