@@ -54,9 +54,31 @@ def _fraction(numerator, denominator):
     return float(int(numerator) / denominator)
 
 
-def _roi_stats(base, ground, scan, roi, *, min_repeated_scans, ray=None):
+def summarize_observation_sufficiency_roi(
+    base,
+    ground,
+    scan,
+    roi,
+    *,
+    min_repeated_scans,
+    ray=None,
+):
+    """Summarize frozen ground/scan/ray evidence inside one evaluation ROI."""
+    base = np.asarray(base, dtype=np.uint8)
+    ground = np.asarray(ground, dtype=np.float64)
+    scan = np.asarray(scan)
     mask = np.asarray(roi, dtype=bool)
+    ray_array = None if ray is None else np.asarray(ray)
+    if base.ndim != 2:
+        raise ValueError("base must be 2D")
+    if ground.shape != base.shape or scan.shape != base.shape or mask.shape != base.shape:
+        raise ValueError("ground, scan, and roi must match base shape")
+    if ray_array is not None and ray_array.shape != base.shape:
+        raise ValueError("ray must match base shape")
     threshold = int(min_repeated_scans)
+    if threshold < 2:
+        raise ValueError("min_repeated_scans must be >= 2 to distinguish single/repeated support")
+
     unknown = mask & (base == UNKNOWN_VALUE)
     finite_ground = np.isfinite(ground)
     unknown_ground = unknown & finite_ground
@@ -65,7 +87,7 @@ def _roi_stats(base, ground, scan, roi, *, min_repeated_scans, ray=None):
     single_scan = unknown_ground & (scan >= 1) & (scan < threshold)
     repeated_scan = unknown_ground & (scan >= threshold)
     scan_observed = single_scan | repeated_scan
-    ray_supported = None if ray is None else unknown_ground & (ray >= 1)
+    ray_supported = None if ray_array is None else unknown_ground & (ray_array >= 1)
     partition = no_ground | no_observation | single_scan | repeated_scan
 
     roi_count = int(np.count_nonzero(mask))
@@ -76,7 +98,9 @@ def _roi_stats(base, ground, scan, roi, *, min_repeated_scans, ray=None):
     single_scan_count = int(np.count_nonzero(single_scan))
     repeated_scan_count = int(np.count_nonzero(repeated_scan))
     scan_observed_count = int(np.count_nonzero(scan_observed))
-    ray_supported_count = None if ray_supported is None else int(np.count_nonzero(ray_supported))
+    ray_supported_count = (
+        None if ray_supported is None else int(np.count_nonzero(ray_supported))
+    )
 
     return {
         "roi_cell_count": roi_count,
@@ -157,7 +181,7 @@ def evaluate_uncertainty_roi_observation_sufficiency(
         "grid_shape_yx": list(base.shape),
         "min_repeated_scans": threshold,
         "entry": {
-            "conservative_outward": _roi_stats(
+            "conservative_outward": summarize_observation_sufficiency_roi(
                 base,
                 ground,
                 scan,
@@ -165,7 +189,7 @@ def evaluate_uncertainty_roi_observation_sufficiency(
                 min_repeated_scans=threshold,
                 ray=ray,
             ),
-            "boundary_uncertainty": _roi_stats(
+            "boundary_uncertainty": summarize_observation_sufficiency_roi(
                 base,
                 ground,
                 scan,
@@ -175,7 +199,7 @@ def evaluate_uncertainty_roi_observation_sufficiency(
             ),
         },
         "exit": {
-            "conservative_outward": _roi_stats(
+            "conservative_outward": summarize_observation_sufficiency_roi(
                 base,
                 ground,
                 scan,
@@ -183,7 +207,7 @@ def evaluate_uncertainty_roi_observation_sufficiency(
                 min_repeated_scans=threshold,
                 ray=ray,
             ),
-            "boundary_uncertainty": _roi_stats(
+            "boundary_uncertainty": summarize_observation_sufficiency_roi(
                 base,
                 ground,
                 scan,
@@ -192,7 +216,7 @@ def evaluate_uncertainty_roi_observation_sufficiency(
                 ray=ray,
             ),
         },
-        "structurally_unresolved_cross": _roi_stats(
+        "structurally_unresolved_cross": summarize_observation_sufficiency_roi(
             base,
             ground,
             scan,
