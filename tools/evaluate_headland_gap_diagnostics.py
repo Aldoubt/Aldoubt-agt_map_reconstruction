@@ -130,12 +130,8 @@ def main():
     print("evaluated_records:", result["evaluated_record_count"])
     for key in sorted(result["failure_counts"]):
         print(f"{key}: {result['failure_counts'][key]}")
-    bridge_counts = {}
-    for item in result["records"]:
-        key = item["bridge_class"]
-        bridge_counts[key] = bridge_counts.get(key, 0) + 1
-    for key in sorted(bridge_counts):
-        print(f"{key}: {bridge_counts[key]}")
+    for key in sorted(result["bridge_type_counts"]):
+        print(f"{key}: {result['bridge_type_counts'][key]}")
 
     print("\nfailed evaluated records:")
     for item in result["records"]:
@@ -146,9 +142,11 @@ def main():
         print(
             f"{item['pair_id']} {item['side']}: "
             f"class={item['failure_class']} "
-            f"new_free={item['new_free_cell_count_in_domain']} "
-            f"new_safe={item['new_safe_cell_count_in_domain']} "
-            f"max_clearance={item['max_new_free_clearance_m']:.3f}m "
+            f"bridge={item['bridge_type']} "
+            f"promoted={item['promoted_free_cell_count_in_domain']} "
+            f"promoted_safe={item['promoted_free_strict_safe_cell_count_in_domain']} "
+            f"baseline_new_safe={item['baseline_free_newly_safe_cell_count_in_domain']} "
+            f"max_promoted_clearance={item['max_promoted_free_clearance_m']:.3f}m "
             f"unknown_bridge={gap_text}"
         )
 
