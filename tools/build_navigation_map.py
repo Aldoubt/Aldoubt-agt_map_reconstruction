@@ -38,7 +38,13 @@ def main():
     parser.add_argument('--semantic-labels', required=True, help='semantic_labels.npy')
     parser.add_argument('--aisles', required=True, help='aisle_rectangles.json')
     parser.add_argument('--trusted-free-mask', help='explicit evidence-approved free-space mask (.npy)')
-    parser.add_argument('--uncertainty-mask', help='cells that must remain unknown unless hard occupied (.npy)')
+    parser.add_argument(
+        '--uncertainty-mask',
+        help=(
+            'veto mask for new trusted-free promotion (.npy); existing baseline '
+            'free cells are preserved'
+        ),
+    )
     parser.add_argument(
         '--no-promote-aisle-prior',
         action='store_true',
@@ -94,8 +100,11 @@ def main():
     print('candidate_cells:', validation['candidate_cell_count'])
     print('trusted_free_cells:', validation['trusted_free_cell_count'])
     print('trusted_free_exported_as_free_cells:', validation['trusted_free_exported_as_free_cell_count'])
+    print('trusted_free_blocked_by_uncertainty_cells:', validation['trusted_free_blocked_by_uncertainty_cell_count'])
     print('uncertainty_cells:', validation['uncertainty_cell_count'])
     print('uncertainty_exported_as_free_cells:', validation['uncertainty_exported_as_free_cell_count'])
+    print('uncertainty_baseline_free_overlap_cells:', validation['uncertainty_baseline_free_overlap_cell_count'])
+    print('uncertainty_nonbaseline_exported_as_free_cells:', validation['uncertainty_nonbaseline_exported_as_free_cell_count'])
     print('conservative_uncertainty_semantics_valid:', validation['conservative_uncertainty_semantics_valid'])
     print('pillar_cells:', validation['pillar_cell_count'])
     print('pillar_as_free_cells:', validation['pillar_as_free_cell_count'])
