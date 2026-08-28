@@ -626,7 +626,7 @@ Next stage: EXP004-C Headland Handoff & Ackermann Transition
 
 ## P1 Evidence-driven Greenhouse Semantic Reconstruction
 
-Status: P1-A through P1-D replay-validated and frozen on 2026-08-27. P1-E0 ground-reference feasibility is replay-validated and frozen; P1-E1 observation-source inventory is implemented; real trajectory-ray replay is pending.
+Status: P1-A through P1-D replay-validated and frozen on 2026-08-27. P1-E0 ground-reference feasibility is replay-validated and frozen; P1-E1 observation-source inventory is implemented; P1-F conservative navigation handoff topology is replay-validated on 2026-08-28; Nav2 runtime smoke replay is pending.
 
 Goal:
 
@@ -966,15 +966,189 @@ P1-E acceptance question:
 
 Does trajectory-aware 3D ray evidence materially increase strict observed-free endpoint coverage and reduce endpoint distance relative to the frozen P1-D3 PCD-only baseline, while rejecting high-canopy rays, low-confidence ground extrapolation, and hard obstacles?
 
+### P1-F Conservative navigation handoff topology
+
+Status: replay-validated on 2026-08-28. Map-side acceptance is frozen; Nav2 planner-only runtime replay is pending.
+
+Goal:
+
+Convert only explicitly trusted endpoint evidence into a conservative Nav2 map overlay, preserve the frozen baseline map semantics, and quantify whether that overlay changes robot-scale adjacent-aisle handoff topology before handing assets to the runtime planner.
+
+Conservative evidence gate:
+
+```text
+current UNKNOWN only
+      |
+      +-- side depth band enabled explicitly
+      +-- distance to observed ground <= 0.50 m
+      +-- K8/K16 disagreement <= 0.10 m
+      +-- scan support >= 1
+      +-- unresolved structural cross excluded
+      v
+trusted free candidate
+```
+
+The replay intentionally enabled only the entry 0-0.5 m band. Exit remained disabled (`exit_max_depth_m=0.0`) because its observation support was not sufficient for conservative promotion. The gate produced:
+
+```text
+trusted_free_cells: 2195
+uncertainty_cells: 160133
+entry_max_depth_m: 0.5
+exit_max_depth_m: 0.0
+semantic auto-thresholding: false
+```
+
+The first conservative exporter (`navigation_conservative_v1`) is retained as a rejected diagnostic artifact. It applied the uncertainty mask to the completed free map and therefore demoted 99811 pre-existing baseline-free cells to UNKNOWN. This was an exporter overlay bug, not evidence that those baseline cells had become unsafe. Its all-radius aisle-clearance collapse must not be reported as a method result.
+
+The corrected `navigation_conservative_v2` reconstructs the frozen baseline-free mask first and uses uncertainty only as a veto on new trusted promotion. Measured validation:
+
+```text
+trusted_free_cells:                         2195
+trusted_free_exported_as_free_cells:        2195
+trusted_free_blocked_by_uncertainty_cells:     0
+uncertainty_cells:                        160133
+uncertainty_baseline_free_overlap_cells:   99811
+uncertainty_nonbaseline_exported_as_free:      0
+conservative_uncertainty_semantics_valid:   true
+pillar_as_free_cells:                          0
+static_obstacle_semantics_valid:             true
+```
+
+The corrected map preserves the baseline 17-row clearance exactly:
+
+| radius | baseline | conservative v2 |
+| ---: | ---: | ---: |
+| 0.20 m | 12 / 17 | 12 / 17 |
+| 0.25 m | 10 / 17 | 10 / 17 |
+| 0.30 m | 8 / 17 | 8 / 17 |
+| 0.35 m | 6 / 17 | 6 / 17 |
+| 0.40 m | 2 / 17 | 2 / 17 |
+| 0.50 m | 0 / 17 | 0 / 17 |
+
+#### P1-F1 Adjacent-aisle scoped headland connectivity
+
+At `radius=0.20 m`, the evaluator uses consecutive aisle IDs only and searches a side-local finite headland domain plus the two baseline-handoff approach corridors. UNKNOWN remains non-traversable; no map editing or semantic promotion occurs in this topology stage.
+
+Measured replay:
+
+```text
+adjacent_pairs:              16
+pair_side_records:           32
+width_ineligible_records:     6
+width-eligible evaluated:    26
+baseline_connected:          11
+conservative_connected:      11
+gained_by_trusted_overlay:    0
+lost_by_trusted_overlay:      0
+planner_pair_tests_enabled:  11
+```
+
+The six width-ineligible records correspond to three pair IDs: `A01-A02`, `A06-A07`, and `A07-A08`. They are excluded from headland-evidence acceptance at this radius rather than being counted as evidence failures.
+
+Entry/exit split among the 26 evaluated records:
+
+```text
+entry: 8 / 13 connected
+exit:  3 / 13 connected
+```
+
+The exit asymmetry must not be interpreted as an intrinsic environmental performance gap because the conservative gate deliberately promoted no exit cells.
+
+#### P1-F2 Corrected gap semantics
+
+For strict failures, diagnostics separate direct promoted-cell clearance from indirect clearance improvement of pre-existing FREE cells. Relaxed search allows UNKNOWN only as a diagnostic upper bound and never promotes it. A second search removes the adjacent-pair cross-window while retaining the finite same-side headland envelope; failures that remain disconnected are classified `hard_or_finite_headland_blocked`, not automatically as physical hard obstacles.
+
+Measured corrected replay:
+
+```text
+records:                         32
+evaluated_records:               26
+strict_connected:                11
+strict_failed:                   15
+hard_or_finite_headland_blocked: 12
+mixed_bridge:                     2
+clearance_only_bridge:            1
+pure_unknown_bridge:              0
+width_ineligible:                 6
+```
+
+Important cases:
+
+| pair-side | promoted | promoted strict-safe | baseline FREE newly-safe | max promoted clearance | diagnostic result |
+| --- | ---: | ---: | ---: | ---: | --- |
+| A09-A10 entry | 56 | 0 | 6 | 0.100 m | hard-or-finite-headland blocked |
+| A14-A15 entry | 233 | 0 | 0 | 0.180 m | hard-or-finite-headland blocked |
+| A16-A17 entry | 282 | 0 | 0 | 0.158 m | hard-or-finite-headland blocked |
+| A02-A03 exit | 0 | 0 | 0 | 0.000 m | mixed bridge; unknown component 0.250 m |
+| A11-A12 exit | 0 | 0 | 0 | 0.000 m | clearance-only bridge; unknown component 0.000 m |
+| A13-A14 exit | 0 | 0 | 0 | 0.000 m | mixed bridge; unknown component 0.100 m |
+
+`A09-A10 entry` demonstrates a local robot-scale effect without a topology gain: the 56 promoted cells do not themselves reach 0.20 m strict clearance, but they cause six pre-existing baseline FREE cells to become strict-safe. `A14-A15 entry` reaches 0.180 m maximum promoted-cell clearance, but the finite-headland relaxed search is still disconnected; it is therefore invalid to infer that adding only another 0.02 m of free width would guarantee connectivity.
+
+The three relaxed-connectable failures are not pure missing-observation gaps. `A02-A03 exit` and `A13-A14 exit` require both UNKNOWN and insufficient-clearance portions; `A11-A12 exit` requires clearance only. This supports the policy distinction:
+
+```text
+not hard != observed free != robot-scale navigable
+```
+
+Test replay on the final map-side implementation:
+
+```text
+PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -q \
+  tests/test_headland_gap_diagnostics.py \
+  tests/test_headland_gap_diagnostics_bundle.py \
+  tests/test_headland_gap_diagnostics_cli.py \
+  tests/test_headland_handoff_connectivity.py \
+  tests/test_headland_handoff_connectivity_cli.py \
+  tests/test_aisle_handoff_boundary.py
+
+16 passed in 1.44s
+```
+
+Map-side outputs:
+
+```text
+results/P1/greenhouse_01_region_split/
+├── navigation_conservative_v2/
+└── topology/
+    ├── headland_handoff_connectivity_r020/
+    │   ├── headland_connectivity.json
+    │   ├── headland_gates.geojson
+    │   ├── planner_pairs.yaml
+    │   └── headland_connectivity.png
+    └── headland_gap_diagnostics_r020_v3/
+        ├── headland_gap_diagnostics.json
+        ├── headland_gap_diagnostics.csv
+        └── headland_gap_diagnostics.png
+```
+
+If the local corrected gap replay directory has a different suffix, the `sources` block inside the final diagnostic JSON is authoritative; do not infer results from an older `r020` directory by name alone.
+
+P1-F conclusion:
+
+At a 0.20 m clearance radius, 11 of 26 width-eligible adjacent-aisle pair-side transitions are strictly connected in both the baseline and conservative navigation maps. Trusted entry-side free-space promotion creates no new topological connection and removes none, while still producing measurable local clearance improvement. Of the 15 remaining strict failures, 12 remain disconnected even under UNKNOWN-relaxed search inside the finite headland envelope; the other three comprise two mixed UNKNOWN/clearance bridges and one clearance-only bridge. No failure is explained by a pure UNKNOWN gap alone.
+
+This is the map-side stop criterion. Do not resume threshold sweeps, enlarge the headland solely to obtain more PASS cases, or modify the PGM for planner appearance. The next step is planner-side validation of the frozen assets.
+
+Runtime handoff:
+
+- producer: `Aldoubt-agt_map_reconstruction`
+- consumer: `agt_navigation_runtime`
+- runtime branch: `feat/headland-planner-smoke`
+- current frozen positive planner cases: 11 pair-sides -> 22 forward/reverse requests
+- current diagnostic negative controls: 3 pair-sides (`mixed_bridge` / `clearance_only_bridge`) -> 6 forward/reverse requests
+- Nav2 planner replay result: pending; no planner success rate is claimed in this record yet.
+
 ### P1 freeze boundary
 
-P1-A through P1-E0 are frozen. Do not change the PGM, candidate policy, row classifier, aisle denominator, handoff definitions, or ground-reference model to improve headland appearance. New progress must come from additional observation provenance or new measured data, then be evaluated against the same D3 endpoint metrics.
+P1-A through P1-F map-side semantics are frozen. Do not change the PGM, candidate policy, row classifier, aisle denominator, handoff definitions, ground-reference model, conservative promotion policy, or headland topology scope to improve planner appearance. New map progress must come from additional observation provenance or new measured data and must be evaluated against the frozen diagnostics. Planner/runtime work consumes these assets without rewriting them.
 
 Primary output roots:
 
 ```text
 results/P1/greenhouse_01_region_split/
 ├── navigation/
+├── navigation_conservative_v2/
 ├── diagnostics/
 ├── handoffs/
 ├── observation/
@@ -989,5 +1163,7 @@ results/P1/greenhouse_01_region_split/
     ├── r020/
     ├── headland_geometry_audit/
     ├── endpoint_envelope_r020/
-    └── endpoint_envelope_r020_evidence_gap/
+    ├── endpoint_envelope_r020_evidence_gap/
+    ├── headland_handoff_connectivity_r020/
+    └── headland_gap_diagnostics_r020_v3/
 ```
