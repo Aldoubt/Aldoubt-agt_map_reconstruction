@@ -349,3 +349,105 @@ def analyze_planner_path_scope_audit(
         },
         "records": records,
     }
+
+
+def write_planner_path_scope_audit_bundle(audit_result, output_dir):
+    """Write deterministic P1-F3 JSON/CSV/GeoJSON outputs without map edits."""
+    import csv
+    import json
+    from pathlib import Path
+
+    output = Path(output_dir).expanduser().resolve()
+    if output.exists() and any(output.iterdir()):
+        raise FileExistsError(f"output directory is not empty: {output}")
+    output.mkdir(parents=True, exist_ok=True)
+
+    json_path = output / "planner_path_scope_audit.json"
+    json_path.write_text(
+        json.dumps(audit_result, indent=2, sort_keys=False) + "\n",
+        encoding="utf-8",
+    )
+
+    fields = [
+        "request_id",
+        "pair_id",
+        "side",
+        "direction",
+        "frozen_conservative_connected",
+        "strict_connected_4",
+        "strict_connected_8",
+        "strict4_matches_frozen",
+        "planner_success",
+        "infrastructure_error",
+        "scope_class",
+        "pair_domain_contained",
+        "finite_headland_contained",
+        "path_cell_count",
+        "path_outside_pair_domain_cell_count",
+        "path_outside_pair_domain_fraction",
+        "path_outside_finite_headland_cell_count",
+        "path_outside_finite_headland_fraction",
+        "touches_unknown",
+        "touches_occupied",
+        "min_source_map_clearance_m",
+        "path_length_m",
+        "direct_distance_m",
+        "detour_ratio",
+        "classification",
+        "negative_reason",
+        "failure_reason",
+    ]
+    csv_path = output / "planner_path_scope_audit.csv"
+    with csv_path.open("w", newline="", encoding="utf-8") as stream:
+        writer = csv.DictWriter(stream, fieldnames=fields)
+        writer.writeheader()
+        for item in audit_result.get("records", []):
+            writer.writerow({key: item.get(key) for key in fields})
+
+    features = []
+    for item in audit_result.get("records", []):
+        path = item.get("path_xy") or []
+        if not item.get("planner_success") or len(path) < 2:
+            continue
+        properties = {
+            key: item.get(key)
+            for key in (
+                "request_id",
+                "pair_id",
+                "side",
+                "direction",
+                "frozen_conservative_connected",
+                "strict_connected_4",
+                "strict_connected_8",
+                "planner_success",
+                "scope_class",
+                "pair_domain_contained",
+                "finite_headland_contained",
+                "path_length_m",
+                "direct_distance_m",
+                "detour_ratio",
+                "min_source_map_clearance_m",
+                "classification",
+            )
+        }
+        features.append(
+            {
+                "type": "Feature",
+                "geometry": {
+                    "type": "LineString",
+                    "coordinates": [[float(p[0]), float(p[1])] for p in path],
+                },
+                "properties": properties,
+            }
+        )
+    geojson_path = output / "planner_path_scope_audit.geojson"
+    geojson_path.write_text(
+        json.dumps(
+            {"type": "FeatureCollection", "features": features},
+            indent=2,
+            sort_keys=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    return {"json": json_path, "csv": csv_path, "geojson": geojson_path}
