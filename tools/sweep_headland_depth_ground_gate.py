@@ -124,7 +124,8 @@ def main():
 
     base = _read_pgm(map_path)
     payload = json.loads(profile_path.read_text(encoding="utf-8"))
-    profile_map_text = (payload.get("sources") or {}).get("map")
+    profile_sources = dict(payload.get("sources") or {})
+    profile_map_text = profile_sources.get("map")
     if profile_map_text and Path(profile_map_text).expanduser().resolve() != map_path:
         raise ValueError("--map differs from depth profile sources.map")
     masks = _load_masks(payload, profile_path)
@@ -150,6 +151,11 @@ def main():
     result["sources"] = {
         "map": str(map_path),
         "depth_profile": str(profile_path),
+        "fused_structural_bundle": profile_sources.get("fused_structural_bundle"),
+        "fused_uncertainty": profile_sources.get("fused_uncertainty"),
+        "row_lattice_completion": profile_sources.get("row_lattice_completion"),
+        "source_structural_bundle": profile_sources.get("source_structural_bundle"),
+        "targeted_3d_audit": profile_sources.get("targeted_3d_audit"),
         "reference_a": str(a_dir),
         "reference_b": str(b_dir),
     }
