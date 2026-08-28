@@ -104,7 +104,8 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
 
     payload = json.loads(profile_path.read_text(encoding="utf-8"))
-    map_text = (payload.get("sources") or {}).get("map")
+    payload_sources = dict(payload.get("sources") or {})
+    map_text = payload_sources.get("map")
     if not map_text:
         raise ValueError("depth profile must preserve sources.map")
     map_path = Path(map_text).expanduser().resolve()
@@ -125,6 +126,11 @@ def main():
     )
     result["sources"] = {
         "depth_profile": str(profile_path),
+        "fused_structural_bundle": payload_sources.get("fused_structural_bundle"),
+        "fused_uncertainty": payload_sources.get("fused_uncertainty"),
+        "row_lattice_completion": payload_sources.get("row_lattice_completion"),
+        "source_structural_bundle": payload_sources.get("source_structural_bundle"),
+        "targeted_3d_audit": payload_sources.get("targeted_3d_audit"),
         "map": str(map_path),
         "ground_reference": str(ground_path),
         "scan_support_count": str(scan_path),
