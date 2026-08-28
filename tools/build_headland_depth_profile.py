@@ -89,7 +89,8 @@ def main():
 
     fused = json.loads(fused_path.read_text(encoding="utf-8"))
     uncertainty = json.loads(uncertainty_path.read_text(encoding="utf-8"))
-    map_text = (fused.get("sources") or {}).get("map")
+    fused_sources = dict(fused.get("sources") or {})
+    map_text = fused_sources.get("map")
     if not map_text:
         raise ValueError("fused structural bundle must preserve sources.map")
     map_path = Path(map_text).expanduser().resolve()
@@ -106,6 +107,9 @@ def main():
         "fused_structural_bundle": str(fused_path),
         "fused_uncertainty": str(uncertainty_path),
         "map": str(map_path),
+        "row_lattice_completion": fused_sources.get("row_lattice_completion"),
+        "source_structural_bundle": fused_sources.get("source_structural_bundle"),
+        "targeted_3d_audit": fused_sources.get("targeted_3d_audit"),
     }
 
     mask_files = {}
