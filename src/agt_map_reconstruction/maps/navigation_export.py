@@ -26,6 +26,8 @@ class NavigationLayers:
     candidate_mask: np.ndarray
     aisle_prior: np.ndarray
     hard_obstacle_mask: np.ndarray
+    trusted_free_mask: np.ndarray
+    uncertainty_mask: np.ndarray
 
 
 def rasterize_aisles(rectangles, shape):
@@ -39,11 +41,22 @@ def rasterize_aisles(rectangles, shape):
     return mask.astype(bool)
 
 
+def _optional_mask(name, value, shape):
+    if value is None:
+        return np.zeros(shape, dtype=bool)
+    mask = np.asarray(value, dtype=bool)
+    if mask.shape != shape:
+        raise ValueError(f'{name} must match semantic_labels shape')
+    return mask
+
+
 def build_navigation_layers(
     semantic_labels,
     aisle_rectangles,
     promote_aisle_prior=True,
     promote_candidates_in_aisles=False,
+    trusted_free_mask=None,
+    uncertainty_mask=None,
 ):
     semantic = np.asarray(semantic_labels)
     if semantic.ndim != 2:
@@ -52,15 +65,25 @@ def build_navigation_layers(
     aisle_prior = rasterize_aisles(aisle_rectangles, semantic.shape)
     hard = np.isin(semantic, HARD_LABELS)
     candidate = np.isin(semantic, CANDIDATE_LABELS)
+    trusted = _optional_mask('trusted_free_mask', trusted_free_mask, semantic.shape)
+    uncertainty = _optional_mask('uncertainty_mask', uncertainty_mask, semantic.shape)
+
     free = semantic == 1
     if promote_aisle_prior:
         free |= aisle_prior
+    if trusted_free_mask is not None:
+        free |= trusted
     if promote_candidates_in_aisles:
         free |= candidate & aisle_prior
 
+    # Uncertain geometry is never promoted to free. This intentionally also
+    # downgrades legacy semantic-free / aisle-prior cells when an explicit
+    # uncertainty mask is supplied. Hard occupied geometry is applied last.
+    free &= ~uncertainty
+
     base = np.full(semantic.shape, UNKNOWN_VALUE, dtype=np.uint8)
     base[free] = FREE_VALUE
-    # Explicit structural/hard labels always override any prior promotion.
+    # Explicit structural/hard labels always override any free-space source.
     base[hard] = OCCUPIED_VALUE
 
     return NavigationLayers(
@@ -68,6 +91,8 @@ def build_navigation_layers(
         candidate_mask=candidate,
         aisle_prior=aisle_prior,
         hard_obstacle_mask=hard,
+        trusted_free_mask=trusted,
+        uncertainty_mask=uncertainty,
     )
 
 
@@ -170,8 +195,10 @@ def write_navigation_bundle(semantic_labels, aisle_rectangles, output_dir,
                             resolution=0.05, origin=(0.0, 0.0, 0.0),
                             clearance_radii_m=(0.20, 0.25, 0.30, 0.35, 0.40, 0.50),
                             promote_aisle_prior=True,
-                            promote_candidates_in_aisles=False):
-    """Build and persist the navigation-map-v2 artifact bundle."""
+                            promote_candidates_in_aisles=False,
+                            trusted_free_mask=None,
+                            uncertainty_mask=None):
+    """Build and persist a navigation-oriented static-map artifact bundle."""
     import json
     from pathlib import Path
 
@@ -185,6 +212,8 @@ def write_navigation_bundle(semantic_labels, aisle_rectangles, output_dir,
         aisle_rectangles,
         promote_aisle_prior=promote_aisle_prior,
         promote_candidates_in_aisles=promote_candidates_in_aisles,
+        trusted_free_mask=trusted_free_mask,
+        uncertainty_mask=uncertainty_mask,
     )
     map_yaml = build_map_yaml('navigation_base_map.pgm', resolution, origin)
     validation = validate_navigation_map(
@@ -198,13 +227,23 @@ def write_navigation_bundle(semantic_labels, aisle_rectangles, output_dir,
         & layers.aisle_prior
         & (layers.base_map == FREE_VALUE)
     )
+    trusted_exported_free = layers.trusted_free_mask & (layers.base_map == FREE_VALUE)
+    uncertainty_exported_free = layers.uncertainty_mask & (layers.base_map == FREE_VALUE)
     validation.update({
         'map_server_yaml_valid': bool(
             map_yaml['mode'] == 'trinary'
             and 0.0 <= map_yaml['free_thresh'] < map_yaml['occupied_thresh'] <= 1.0
         ),
+        'aisle_prior_promotion_enabled': bool(promote_aisle_prior),
         'candidate_cell_count': int(layers.candidate_mask.sum()),
         'candidate_promoted_to_free_cell_count': int(promoted_candidates.sum()),
+        'trusted_free_cell_count': int(layers.trusted_free_mask.sum()),
+        'trusted_free_exported_as_free_cell_count': int(trusted_exported_free.sum()),
+        'uncertainty_cell_count': int(layers.uncertainty_mask.sum()),
+        'uncertainty_exported_as_free_cell_count': int(uncertainty_exported_free.sum()),
+        'conservative_uncertainty_semantics_valid': bool(
+            not np.any(uncertainty_exported_free)
+        ),
         'hard_obstacle_cell_count': int(layers.hard_obstacle_mask.sum()),
         'hard_obstacle_as_free_cell_count': int(
             np.count_nonzero(layers.hard_obstacle_mask & (layers.base_map == FREE_VALUE))
@@ -229,6 +268,10 @@ def write_navigation_bundle(semantic_labels, aisle_rectangles, output_dir,
         yaml.safe_dump(map_yaml, stream, sort_keys=False)
     np.save(output / 'candidate_mask.npy', layers.candidate_mask.astype(np.uint8))
     np.save(output / 'static_obstacle_mask.npy', layers.hard_obstacle_mask.astype(np.uint8))
+    if trusted_free_mask is not None:
+        np.save(output / 'trusted_free_mask.npy', layers.trusted_free_mask.astype(np.uint8))
+    if uncertainty_mask is not None:
+        np.save(output / 'uncertainty_mask.npy', layers.uncertainty_mask.astype(np.uint8))
     with (output / 'validation.json').open('w', encoding='utf-8') as stream:
         json.dump(validation, stream, indent=2, sort_keys=True)
         stream.write('\n')
