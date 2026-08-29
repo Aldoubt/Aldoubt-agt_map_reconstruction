@@ -96,7 +96,7 @@ def _rect(x0, y0, x1, y1):
     }
 
 
-def test_conservative_navigation_layers_accept_trusted_free_and_keep_uncertainty_unknown():
+def test_conservative_navigation_layers_preserve_baseline_free_and_veto_uncertain_new_promotion():
     semantic = np.zeros((6, 10), dtype=np.uint8)
     semantic[2, 2] = 1
     semantic[2, 7] = 2
@@ -115,7 +115,7 @@ def test_conservative_navigation_layers_accept_trusted_free_and_keep_uncertainty
     )
 
     assert layers.base_map[2, 5] == FREE_VALUE
-    assert layers.base_map[2, 4] == UNKNOWN_VALUE
-    assert layers.base_map[2, 2] == UNKNOWN_VALUE
+    assert layers.base_map[2, 4] == UNKNOWN_VALUE  # uncertain non-baseline stays unknown
+    assert layers.base_map[2, 2] == FREE_VALUE  # baseline free is never demoted by uncertainty
     assert layers.base_map[2, 7] == OCCUPIED_VALUE
     assert layers.base_map[3, 3] == UNKNOWN_VALUE
