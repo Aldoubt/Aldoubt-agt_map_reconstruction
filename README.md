@@ -92,6 +92,52 @@ In-aisle route geometry validation
 | Ackermann / turning-radius constraint | 🚧 下一阶段 | 需要真实车辆几何参数 |
 | ROS 2 / Nav2 runtime | ❌ 不属于本仓库 | 由外部导航系统集成 |
 
+## 稳定工作流：Plugin → Experiment → Map Asset Validation
+
+仓库现在采用三个明确的责任层：
+
+~~~text
+algorithm plugin
+      |
+      v
+benchmark.json
+      |
+      v
+experiment.json
+      |
+      v
+map reconstruction experiments
+      |
+      v
+Navigation Map V2
+      |
+      v
+asset_validation.json
+      |
+      v
+MapManager / localization / Nav2
+~~~
+
+常用命令：
+
+~~~bash
+# 查看当前已注册算法
+python tools/run_benchmark.py --list-algorithms
+
+# 使用统一插件 benchmark
+python tools/run_benchmark.py \
+  --pcd /path/to/map.pcd \
+  --config configs/benchmark_example.yaml \
+  --output results/EXP001
+
+# Navigation Map V2 生成后，在交给运行时之前做资产验收
+python tools/validate_map_assets.py \
+  --bundle results/EXP003/navigation-map-v2
+~~~
+
+外部算法不需要修改主 runner，只需通过 `register_algorithm()` 注册，并使用
+`--plugin-module` 动态加载。详细契约见 `docs/benchmark_design.md`。
+
 ## 4. 核心流水线
 
 ~~~text
@@ -386,6 +432,48 @@ The goal is not simply to produce a black-and-white map, but to preserve provena
 | Headland handoff validation | 🚧 Next stage | EXP004-C |
 | Ackermann / turning-radius constraints | 🚧 Next stage | Requires measured vehicle geometry |
 | ROS 2 / Nav2 runtime | ❌ Out of scope | Integrate externally |
+
+## Stable Workflow: Plugin → Experiment → Map Asset Validation
+
+The repository now separates three responsibilities:
+
+~~~text
+algorithm plugin
+      |
+      v
+benchmark.json
+      |
+      v
+experiment.json
+      |
+      v
+map reconstruction experiments
+      |
+      v
+Navigation Map V2
+      |
+      v
+asset_validation.json
+      |
+      v
+runtime handoff
+~~~
+
+~~~bash
+python tools/run_benchmark.py --list-algorithms
+
+python tools/run_benchmark.py \
+  --pcd /path/to/map.pcd \
+  --config configs/benchmark_example.yaml \
+  --output results/EXP001
+
+python tools/validate_map_assets.py \
+  --bundle results/EXP003/navigation-map-v2
+~~~
+
+External algorithms register through `register_algorithm()` and can be loaded
+with `--plugin-module` without editing the canonical runner. See
+`docs/benchmark_design.md` for the full contract.
 
 ## 4. Navigation Map V2 Policy
 
