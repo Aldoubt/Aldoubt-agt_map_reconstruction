@@ -1,0 +1,9 @@
+# Parameters are scoped by registered plugin name.
+algorithms:
+  height_threshold:
+    height_threshold: 0.15
+    ground_percentile: 10.0
+
+  morphological_pmf:
+    height_threshold: 0.25
+    bins: 200
