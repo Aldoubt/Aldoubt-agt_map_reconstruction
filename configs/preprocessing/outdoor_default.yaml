@@ -1,0 +1,20 @@
+preprocessing:
+  # Migrated from the historical agt_pointcloud_map_tools intent.
+  voxel_size: 0.10
+
+  radius_outlier:
+    enabled: true
+    radius: 0.30
+    min_neighbors: 8
+
+  # Disabled by default for large fused maps. Enable only after checking that
+  # the tolerance does not connect the whole scene into one giant component.
+  cluster_filter:
+    enabled: false
+    tolerance: 0.25
+    min_cluster_size: 20
+    max_cluster_size: null
+
+  # Intentionally not implemented here:
+  # Dynamic human/vehicle ghost removal needs temporal/static evidence, not
+  # only one fused PCD. Use the temporal benchmark/pipeline for that problem.
