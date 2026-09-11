@@ -75,6 +75,7 @@ In-aisle route geometry validation
 | 能力 | 状态 | 说明 |
 |---|---|---|
 | PCD 加载 | ✅ 已实现 | Open3D 离线加载 |
+| PCD 离线清理 | ✅ 已实现 | voxel + radius outlier + optional cluster-size filter |
 | Height Threshold | ✅ 已实现 | 简单地面分割 baseline |
 | PMF-inspired baseline | ✅ 已实现 | 轻量近似基线，不等同于完整标准 PMF |
 | CSF | 🧭 计划/待适配 | 当前 main 未实现 |
@@ -191,10 +192,32 @@ PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 python -m pytest -q
 
 ## 8. 常用入口
 
+### PCD 离线清理
+
+历史 `agt_pointcloud_map_tools` 的有效需求已收敛到本仓库 preprocessing 层；旧 ROS 2 skeleton 不再作为独立运行时维护。在线 self-filter / crop / voxel / diagnostics 属于 `agt_pointcloud_pipeline`。
+
+~~~bash
+PYTHONPATH=src python tools/clean_pcd.py \
+  --pcd /path/to/global_map.pcd \
+  --config configs/preprocessing/outdoor_default.yaml \
+  --output results/preprocessing/global_map_clean.pcd \
+  --removed-output results/preprocessing/global_map_removed.pcd \
+  --report results/preprocessing/cleaning_report.json
+~~~
+
+单张融合 PCD 不足以可靠判断人/车动态残影，因此本工具不会把“dynamic ghost cleaner”伪装成已实现能力；动态/静态判断应使用带时间证据的注册帧或专门 benchmark。
+
+迁移审计见 [docs/MIGRATION_POINTCLOUD_MAP_TOOLS.md](docs/MIGRATION_POINTCLOUD_MAP_TOOLS.md)。
+
 ### 地面分割 baseline
 
 ~~~bash
-python tools/run_benchmark.py --pcd /path/to/map.pcd
+PYTHONPATH=src python tools/run_benchmark.py --pcd /path/to/map.pcd
+
+# 可选：先清理，再进入同一 benchmark
+PYTHONPATH=src python tools/run_benchmark.py \
+  --pcd /path/to/map.pcd \
+  --preprocess-config configs/preprocessing/outdoor_default.yaml
 ~~~
 
 当前入口默认运行 height-threshold baseline。PMF-inspired 以及未来 Patchwork++ 等算法建议后续统一接入 registry/benchmark runner。
@@ -272,6 +295,7 @@ python tools/search_smooth_lateral_routes.py \
 │   └── experiments/
 ├── src/agt_map_reconstruction/
 │   ├── algorithms/
+│   ├── preprocessing/
 │   ├── io/
 │   ├── maps/
 │   └── visualization/
