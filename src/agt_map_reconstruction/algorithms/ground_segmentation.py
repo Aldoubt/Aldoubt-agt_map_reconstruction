@@ -1,27 +1,32 @@
-from dataclasses import dataclass
+"""Backward-compatible wrappers for the pre-registry API.
+
+New code should use agt_map_reconstruction.algorithms.run_algorithm().
+"""
+
+from __future__ import annotations
+
 import numpy as np
 
-
-@dataclass
-class SegmentationResult:
-    ground: np.ndarray
-    non_ground: np.ndarray
+from .base import SegmentationResult
+from .registry import run_algorithm
 
 
-def height_threshold(points: np.ndarray, threshold: float = 0.15):
-    """Simple agricultural baseline.
+def height_threshold(points: np.ndarray, threshold: float = 0.15) -> SegmentationResult:
+    return run_algorithm(
+        "height_threshold",
+        points,
+        {"height_threshold": float(threshold)},
+    )
 
-    Assumes normalized ground is close to the minimum local elevation.
+
+def voxel_ground(points: np.ndarray, voxel_size: float = 0.2) -> SegmentationResult:
+    """Legacy placeholder retained for callers of the original API.
+
+    voxel_size is recorded for compatibility but no voxel segmentation is
+    performed. The function delegates to the height-threshold baseline.
     """
-    z = points[:, 2]
-    ground_level = np.percentile(z, 10)
-    mask = np.abs(z - ground_level) < threshold
-    return SegmentationResult(points[mask], points[~mask])
-
-
-def voxel_ground(points: np.ndarray, voxel_size: float = 0.2):
-    """Placeholder interface for voxel based ground methods.
-
-    Advanced methods (PMF/CSF/Patchwork) will share this interface.
-    """
-    return height_threshold(points)
+    result = run_algorithm("height_threshold", points)
+    metadata = dict(result.metadata)
+    metadata["legacy_wrapper"] = "voxel_ground"
+    metadata["voxel_size"] = float(voxel_size)
+    return SegmentationResult(result.ground_points, result.non_ground_points, metadata)

@@ -1,0 +1,14 @@
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Generated experiment/map artifacts
+results/
+
+# Local IDE / OS noise
+.vscode/
+.idea/
+.DS_Store

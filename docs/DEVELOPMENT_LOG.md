@@ -4,171 +4,251 @@
 
 Purpose:
 
-A standalone agricultural LiDAR map reconstruction benchmark. The project evaluates different point cloud processing and ground segmentation methods and converts LiDAR maps into navigation-related 2D representations.
+A standalone offline LiDAR map reconstruction, traversability, experiment, and
+navigation-map validation repository. Runtime localization, local perception,
+planning, control, behavior trees, and vehicle interfaces remain outside this
+project.
 
 ---
 
-# Phase 0 - Benchmark Foundation (Completed)
+# 2026-09-11 — Plugin Benchmark Pipeline Refactor
 
-Completed:
+Status: implemented on `feature/plugin-benchmark-pipeline`.
 
-- PCD loading from FAST-LIVO2/LIO-SLAM maps
-- Unified segmentation interface
-- Algorithm comparison framework
-- Visualization pipeline
+## Problem
 
-Algorithms:
+The repository had three incompatible algorithm execution paths:
 
-| Algorithm | Status | Notes |
-|---|---|---|
-| Height threshold | completed | Global height baseline |
-| Morphological PMF baseline | completed | Local morphology baseline |
+1. `ground_segmentation.py` defined one `SegmentationResult`;
+2. `registry.py` defined another `SegmentationResult`;
+3. `height_threshold.py` and `morphological_pmf.py` returned dictionaries.
 
----
+In addition:
 
-# Phase 1 - Real FAST-LIVO2 Dataset Validation (Completed)
+- `run_benchmark.py` bypassed the registry;
+- `run_compare.py` maintained a second hard-coded algorithm table;
+- benchmark outputs had no stable machine-readable provenance manifest;
+- Navigation Map V2 had generation validation but no standalone pre-runtime
+  bundle validator.
 
-Dataset:
+## Implemented
 
-```
-FAST-LIVO2 processed.pcd
-size: ~2.6GB
-```
-
-Results:
-
-## Height threshold
-
-```
-ground:      9838256
-non-ground: 76074357
-```
-
-Observation:
-
-- Excessive non-ground classification.
-- Useful only as a simple baseline.
-
-## Morphological PMF baseline
-
-```
-ground:      38445361
-non-ground: 47467252
-```
-
-Observation:
-
-- Better recovery of continuous terrain.
-- Agricultural row structures become visible.
-
----
-
-# Phase 2 - Agricultural Structure Recovery (Current)
-
-## Motivation
-
-Traditional ground segmentation does not directly solve agricultural navigation.
-
-The target changes from:
-
-```
-ground / non-ground
-```
-
-into:
-
-```
-PCD
- |
-terrain understanding
- |
-relative elevation
- |
-traversability reasoning
- |
-row corridor extraction
- |
-centerline generation
-```
-
----
-
-# Phase 2.1 - Relative Elevation and Traversability (Implemented)
+### Canonical plugin API
 
 Added:
 
-- Local elevation normalization
-- Relative height calculation
-- Initial geometry based traversability map
-
-Pipeline:
-
-```
-Ground cloud
-    |
-height grid
-    |
-local ground estimation
-    |
-relative height
-    |
-traversability classification
+```text
+src/agt_map_reconstruction/algorithms/base.py
+src/agt_map_reconstruction/algorithms/__init__.py
 ```
 
-Outputs:
+Canonical result:
 
-```
-height_map.png
-relative_height.png
-traversability.png
-```
-
-Current classification:
-
-```
-0 unknown
-1 traversable
-2 obstacle
+```text
+SegmentationResult
+├── ground_points
+├── non_ground_points
+└── metadata
 ```
 
-Note:
+The old `ground_segmentation.py` is now a compatibility layer only.
 
-The current traversability model is a baseline and will be improved with:
+### Registry-driven built-ins
 
-- slope
-- roughness
-- corridor continuity
-- row structure constraints
+Built-in plugins:
+
+- `height_threshold`;
+- `morphological_pmf` (explicitly documented as PMF-inspired, not canonical PMF).
+
+External modules can register algorithms through `register_algorithm()` and be
+loaded with `--plugin-module`.
+
+### Plugin benchmark
+
+Added:
+
+```text
+src/agt_map_reconstruction/benchmark.py
+```
+
+Each algorithm writes:
+
+```text
+benchmark.json
+schema = agt.map_reconstruction.benchmark/v1
+```
+
+The benchmark enforces:
+
+```text
+ground_count + non_ground_count == input_count
+```
+
+### Experiment manifest
+
+Added:
+
+```text
+src/agt_map_reconstruction/experiment.py
+experiment.json
+schema = agt.map_reconstruction.experiment/v1
+```
+
+This is the machine-readable handoff from algorithm comparison to later
+reconstruction experiments.
+
+### Map asset validation
+
+Added:
+
+```text
+src/agt_map_reconstruction/map_asset_validation.py
+tools/validate_map_assets.py
+```
+
+The validator checks the complete Navigation Map V2 bundle before it is handed
+to MapManager/localization/Nav2.
+
+### Tool consolidation
+
+Canonical benchmark CLI:
+
+```text
+tools/run_benchmark.py
+```
+
+Legacy `tools/run_compare.py` now delegates to the canonical runner instead of
+maintaining a second algorithm list.
+
+### Engineering
+
+Added:
+
+- `configs/benchmark_example.yaml`;
+- plugin/benchmark tests;
+- map asset validation tests;
+- GitHub Actions CI;
+- generated-results `.gitignore`;
+- Python/test constraints in `pyproject.toml`.
 
 ---
 
-# Next targets
+# Current Stable Architecture
 
-## Phase 2.2 Corridor Extraction
-
-Implement:
-
-- row direction estimation
-- parallel structure detection
-- corridor mask generation
-- centerline extraction
-
-Outputs:
-
+```text
+plugin
+  |
+  v
+benchmark.json
+  |
+  v
+experiment.json
+  |
+  v
+reconstruction experiment
+  |
+  v
+Navigation Map V2
+  |
+  v
+asset_validation.json
+  |
+  v
+runtime handoff
 ```
-corridor_mask.png
-centerline.csv
-```
+
+Human experiment decisions remain in `docs/EXPERIMENTS.md`.
 
 ---
 
-# Experiment Record Rule
+# Existing Experiment Progress
 
-Every algorithm update records:
+## EXP001 — Ground Segmentation
 
-1. Algorithm name
-2. Dataset
-3. Parameters
-4. Visualization output
-5. Failure cases
-6. Decision for next iteration
+Completed baseline work:
+
+- height threshold;
+- PMF-inspired baseline.
+
+Next algorithm integrations should be plugins rather than new hard-coded
+benchmark scripts.
+
+Candidate adapters:
+
+- Patchwork++;
+- canonical PMF/PCL;
+- CSF;
+- LineFit.
+
+## EXP002 — Agricultural Structure Recovery
+
+Implemented:
+
+- local elevation normalization;
+- relative elevation;
+- traversability baseline;
+- row direction estimation;
+- row-aware corridor recovery;
+- centerline generation.
+
+## EXP003 / EXP003.1 — Navigation Map V2
+
+Implemented:
+
+- Nav2-compatible PGM/YAML export;
+- static/candidate semantic separation;
+- pillar/wall/ridge hard-obstacle priority;
+- clearance validation;
+- static-obstacle semantic correction.
+
+## EXP004-A — Polygon Footprint
+
+Implemented and replay validated.
+
+## EXP004-B1 — Constant Lateral Offset
+
+Implemented and replay validated.
+
+## EXP004-B2 — Smooth Lateral Route
+
+Implemented and replay validated.
+
+Main conclusion:
+
+Many remaining failures occur at aisle entry/exit boundaries, not in the
+in-aisle interior.
+
+## Next Experiment — EXP004-C
+
+Priority:
+
+- explicit headland handoff poses;
+- measured wheelbase/steering geometry;
+- minimum-turning-radius / Ackermann constraints;
+- failure classification between map, unknown, headland depth, and kinematics.
+
+Do not increase in-aisle planning complexity before validating this handoff.
+
+---
+
+# Repository Boundary
+
+This repository owns:
+
+- offline point-cloud algorithm benchmarking;
+- reconstruction experiments;
+- elevation/traversability/corridor reasoning;
+- navigation-map generation;
+- footprint/route geometry validation;
+- map asset acceptance.
+
+This repository does not own:
+
+- global localization;
+- continuous localization tracking;
+- local online obstacle perception;
+- Nav2 planner/controller runtime;
+- behavior trees;
+- robot base control.
+
+That boundary is intentional.
